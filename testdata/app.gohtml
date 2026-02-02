@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap">
+
+    {{ if .testViewDataKey }}
+        <meta name="test-key-meta" content="{{ .testViewDataKey }}">
+    {{ end }}
+
+    {{ if .viteDevServer }}
+    {{/* Vite dev server */}}
+    <script type="module" src="/@vite/client"></script>
+    <script type="module" src="/src/js/app.js"></script>
+    {{ else }}
+    {{/* Production - use compiled assets */}}
+    <link href="{{ asset "css/app.css" }}" rel="stylesheet">
+    <script src="{{ asset "js/app.js" }}" defer></script>
+    {{ end }}
+
+    <link rel="icon" type="image/x-icon" href="{{ asset "favicon.ico" }}">
+</head>
+<body>
+<span>{{ embed "/test-text" }}</span>
+<span>{{ raw "/test-text" }}</span>
+<div id="app" data-page="{{ marshal .page }}"></div>
+</body>
+</html>

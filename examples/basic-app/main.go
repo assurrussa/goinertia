@@ -1,0 +1,141 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"runtime"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/session"
+	"github.com/gofiber/fiber/v3/middleware/static"
+
+	"github.com/assurrussa/goinertia"
+)
+
+type MenuItem struct {
+	Label string `json:"label"`
+	Href  string `json:"href"`
+}
+
+type BaseController struct {
+	inertia *goinertia.Inertia
+}
+
+func NewBaseController(inertia *goinertia.Inertia) *BaseController {
+	return &BaseController{inertia: inertia}
+}
+
+func (c *BaseController) Home(ctx fiber.Ctx) error {
+	return c.inertia.Render(ctx, "Home", map[string]any{
+		"title": "Home",
+	})
+}
+
+func (c *BaseController) Users(ctx fiber.Ctx) error {
+	return c.inertia.Render(ctx, "Users", map[string]any{
+		"title": "Users",
+	})
+}
+
+func (c *BaseController) Settings(ctx fiber.Ctx) error {
+	return c.inertia.Render(ctx, "Settings", map[string]any{
+		"title": "Settings",
+	})
+}
+
+func (c *BaseController) Conflict(ctx fiber.Ctx) error {
+	// Flash message
+	c.inertia.WithFlashError(ctx, "You have been redirected because the page was not found (409 -> Redirect).")
+	// Redirect or RedirectBack
+	// return c.inertia.Redirect(ctx, "/")
+	return c.inertia.RedirectBack(ctx)
+}
+
+// FiberSessionWrapper wraps fiber session to match FiberSessionStore interface.
+type FiberSessionWrapper struct {
+	*session.Session
+}
+
+func (w *FiberSessionWrapper) Set(key, val any) {
+	if k, ok := key.(string); ok {
+		w.Session.Set(k, val)
+	}
+}
+
+func (w *FiberSessionWrapper) Get(key any) any {
+	if k, ok := key.(string); ok {
+		return w.Session.Get(k)
+	}
+	return nil
+}
+
+func (w *FiberSessionWrapper) Delete(key any) {
+	if k, ok := key.(string); ok {
+		w.Session.Delete(k)
+	}
+}
+
+type SessionProvider struct {
+	store *session.Store
+}
+
+func (s *SessionProvider) Get(c fiber.Ctx) (*FiberSessionWrapper, error) {
+	sess, err := s.store.Get(c)
+	if err != nil {
+		return nil, err
+	}
+	return &FiberSessionWrapper{Session: sess}, nil
+}
+
+func main() {
+	port := flag.String("port", "8383", "Port to listen on")
+	flag.Parse()
+
+	menu := []MenuItem{
+		{Label: "Home", Href: "/"},
+		{Label: "Users", Href: "/users"},
+		{Label: "Settings", Href: "/settings"},
+		{Label: "Conflict (409)", Href: "/not-found"},
+	}
+
+	// Initialize Session Store
+	_, store := session.NewWithStore()
+	sessionProvider := &SessionProvider{store: store}
+	sessionAdapter := goinertia.NewFiberSessionAdapter(sessionProvider)
+
+	viewFS := os.DirFS(examplePath("views"))
+	inertiaAdapter := goinertia.New(fmt.Sprintf("http://localhost:%s", *port),
+		goinertia.WithFS(viewFS),
+		goinertia.WithRootTemplate("app.gohtml"),
+		goinertia.WithRootErrorTemplate("error.gohtml"),
+		goinertia.WithSessionStore(sessionAdapter),
+		// global props
+		goinertia.WithSharedProps(map[string]any{
+			"menu": menu,
+		}),
+	)
+
+	app := fiber.New(fiber.Config{ErrorHandler: inertiaAdapter.MiddlewareErrorListener()})
+	app.Get("/assets/*", static.New(examplePath("public")))
+	app.Use(inertiaAdapter.Middleware())
+
+	controller := NewBaseController(inertiaAdapter)
+	app.Get("/", controller.Home)
+	app.Get("/users", controller.Users)
+	app.Get("/settings", controller.Settings)
+	app.Get("/not-found", controller.Conflict)
+
+	log.Fatal(app.Listen(":" + *port))
+}
+
+func examplePath(path string) string {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return path
+	}
+
+	return filepath.Join(filepath.Dir(filename), path)
+}

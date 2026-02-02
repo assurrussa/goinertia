@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap">
+
+    {{ if .viteDevServer }}
+    {{/* Vite dev server */}}
+    <script type="module" src="/@vite/client"></script>
+    <script type="module" src="/src/js/app.ts"></script>
+    <link rel="icon" type="image/x-icon" href="/src/images/favicon.ico">
+    {{ else }}
+    {{/* Production - use compiled assets */}}
+    <link href="{{ asset "css/vendor.css" }}" rel="stylesheet">
+    <link href="{{ asset "css/app.css" }}" rel="stylesheet">
+    <script type="module" src="{{ asset "js/app.js" }}"></script>
+    <link rel="icon" type="image/x-icon" href="{{ asset "favicon.ico" }}">
+    {{ end }}
+    
+    <script>
+        (function() {
+            try {
+                const savedTheme = localStorage.getItem('theme-mode');
+                const systemDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const shouldBeDark = savedTheme === 'dark' || (savedTheme === null && systemDarkMode);
+                
+                if (shouldBeDark) {
+                    document.documentElement.classList.add('dark');
+                    document.documentElement.setAttribute('data-theme-mode', 'dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    document.documentElement.setAttribute('data-theme-mode', 'light');
+                }
+            } catch (error) {
+                console.warn('Error in theme script:', error);
+            }
+        })();
+    </script>
+</head>
+<body>
+<div id="app" data-page="{{ marshal .page }}"></div>
+</body>
+</html>

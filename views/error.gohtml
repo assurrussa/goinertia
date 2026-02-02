@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ if .title }}{{ .title }}{{ else }}Error {{ .code }}{{ end }}</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <link rel="icon" type="image/x-icon" href="{{ asset "favicon.ico" }}">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #4e6ae8 0%, #36105c 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #1a202c;
+            line-height: 1.6;
+        }
+
+        .error-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 3rem 2rem;
+            max-width: 600px;
+            width: 90%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .error-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 2rem;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            color: white;
+            font-weight: 700;
+        }
+
+        .error-code {
+            font-size: 4rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 1rem;
+            line-height: 1;
+        }
+
+        .error-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 1rem;
+        }
+
+        .error-message {
+            font-size: 1.1rem;
+            color: #718096;
+            margin-bottom: 2rem;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .error-details {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+            text-align: left;
+        }
+
+        .error-details h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 0.5rem;
+        }
+
+        .error-details pre {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            font-size: 0.875rem;
+            color: #4a5568;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.5;
+        }
+
+        .back-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 10px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin-top: 1rem;
+        }
+
+        .back-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(102, 126, 234, 0.4);
+        }
+
+        .back-button svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        @media (max-width: 640px) {
+            .error-container {
+                padding: 2rem 1.5rem;
+                margin: 1rem;
+            }
+
+            .error-code {
+                font-size: 3rem;
+            }
+
+            .error-title {
+                font-size: 1.25rem;
+            }
+
+            .error-message {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-icon">
+            {{ if eq .code 404 }}!{{ else if eq .code 403 }}🔒{{ else if eq .code 500 }}⚠{{ else }}💥{{ end }}
+        </div>
+        
+        <div class="error-code">{{ .code }}</div>
+        
+        <h1 class="error-title">
+            {{ if eq .code 404 }}Page not found
+            {{ else if eq .code 403 }}Access denied
+            {{ else if eq .code 500 }}Internal server error
+            {{ else if eq .code 401 }}Authorization required
+            {{ else if eq .code 419 }}Page expired
+            {{ else if eq .code 429 }}Too many requests
+            {{ else }}An error occurred
+            {{ end }}
+        </h1>
+        
+        <p class="error-message">
+            {{ if .error }}
+                {{ .error }}
+            {{ else if eq .code 404 }}
+                The requested page does not exist or has been moved.
+            {{ else if eq .code 403 }}
+                You do not have permission to access this resource.
+            {{ else if eq .code 500 }}
+                A server error occurred. We are working on it.
+            {{ else if eq .code 401 }}
+                Authorization is required to access this page.
+            {{ else if eq .code 419 }}
+                The page has expired. Please try again.
+            {{ else if eq .code 429 }}
+                Request limit exceeded. Please try again later.
+            {{ else }}
+                Something went wrong. Please refresh the page.
+            {{ end }}
+        </p>
+
+        {{ if .details }}
+        <div class="error-details">
+            <h3>Error details (debug):</h3>
+            <pre>Message: {{ .message }}</pre>
+            <pre>Details: {{ .details }}</pre>
+        </div>
+        {{ end }}
+    </div>
+</body>
+</html>

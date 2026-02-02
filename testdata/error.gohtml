@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error {{.code}}</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+        .error-code { font-size: 48px; color: #e74c3c; font-weight: bold; }
+        .error-message { font-size: 18px; color: #7f8c8d; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="error-code">{{.code}}</div>
+    <div class="error-message">{{.message}}</div>
+    {{if .details}}
+    <div class="error-details">
+        <h3>Details:</h3>
+        <pre>{{.details}}</pre>
+    </div>
+    {{end}}
+</body>
+</html> 
