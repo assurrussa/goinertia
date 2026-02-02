@@ -1,5 +1,10 @@
 # goinertia
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/assurrussa/goinertia.svg)](https://pkg.go.dev/github.com/assurrussa/goinertia)
+[![Go Report Card](https://goreportcard.com/badge/github.com/assurrussa/goinertia)](https://goreportcard.com/report/github.com/assurrussa/goinertia)
+[![Go](https://github.com/assurrussa/goinertia/actions/workflows/go.yml/badge.svg)](https://github.com/assurrussa/goinertia/actions/workflows/go.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 **The Fiber-first adapter for Inertia.js.**
 
 `goinertia` allows you to build modern single-page apps using [Vue.js](https://vuejs.org/), [React](https://reactjs.org/), or [Svelte](https://svelte.dev/) while keeping routing and controllers in your [Go (Fiber)](https://gofiber.io/) backend. It strictly adheres to the [Inertia.js protocol](https://inertiajs.com/the-protocol).
