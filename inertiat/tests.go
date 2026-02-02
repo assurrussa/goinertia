@@ -9,7 +9,9 @@ import (
 )
 
 func NewForTest(baseURL string, opts ...goinertia.Option) *goinertia.Inertia {
-	o := []goinertia.Option{
+	options := make([]goinertia.Option, 0, 12+len(opts))
+	options = append(
+		options,
 		goinertia.WithAssetVersion("v1.0"),
 		goinertia.WithRootTemplate("app.gohtml"),
 		goinertia.WithRootErrorTemplate("error.gohtml"),
@@ -28,9 +30,9 @@ func NewForTest(baseURL string, opts ...goinertia.Option) *goinertia.Inertia {
 		goinertia.WithSharedViewData(map[string]any{
 			"testViewDataKey": "test_view_data_VALUE",
 		}),
-	}
+	)
 
-	o = append(o, opts...)
+	options = append(options, opts...)
 
-	return goinertia.New(baseURL, o...)
+	return goinertia.New(baseURL, options...)
 }

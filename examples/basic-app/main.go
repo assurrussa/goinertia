@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -107,7 +106,7 @@ func main() {
 	sessionAdapter := goinertia.NewFiberSessionAdapter(sessionProvider)
 
 	viewFS := os.DirFS(examplePath("views"))
-	inertiaAdapter := goinertia.New(fmt.Sprintf("http://localhost:%s", *port),
+	inertiaAdapter := goinertia.New("http://localhost:"+*port,
 		goinertia.WithFS(viewFS),
 		goinertia.WithRootTemplate("app.gohtml"),
 		goinertia.WithRootErrorTemplate("error.gohtml"),
