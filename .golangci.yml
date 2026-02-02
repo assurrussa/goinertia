@@ -148,24 +148,6 @@ linters:
       require-explanation: true
       allow-no-explanation:
         - lll
-    perfsprint:
-      # Optimizes `fmt.Sprintf` with only one argument.
-      sprintf1: true
-      # Optimizes `fmt.Sprintf` into string concatenation.
-      str-concat: true
-      # Optimizes `fmt.Errorf` into `errors.New`.
-      errorf: true
-      # Optimizes `fmt.Sprintf` with integer format specifier.
-      int-conversion: true
-      # Optimizes `fmt.Sprintf` with error format specifier.
-      err-error: true
-    prealloc:
-      # Report preallocation suggestions only on simple loops.
-      simple: true
-      # Report preallocation suggestions on range loops.
-      range-loops: true
-      # Report preallocation suggestions on for loops.
-      for-loops: true
     revive:
       severity: error
       rules:
