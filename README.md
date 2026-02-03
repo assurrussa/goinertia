@@ -7,9 +7,13 @@
 
 **The Fiber-first adapter for Inertia.js.**
 
-`goinertia` allows you to build modern single-page apps using [Vue.js](https://vuejs.org/), [React](https://reactjs.org/), or [Svelte](https://svelte.dev/) while keeping routing and controllers in your [Go (Fiber)](https://gofiber.io/) backend. It strictly adheres to the [Inertia.js protocol](https://inertiajs.com/the-protocol).
+`goinertia` allows you to build modern single-page apps
+using [Vue.js](https://vuejs.org/), [React](https://reactjs.org/), or [Svelte](https://svelte.dev/) while keeping
+routing and controllers in your [Go (Fiber)](https://gofiber.io/) backend. It strictly adheres to
+the [Inertia.js protocol](https://inertiajs.com/the-protocol).
 
 Visit:
+
 - [inertiajs.com](https://inertiajs.com/) to learn more.
 - [fiber](https://gofiber.io/) to learn more.
 
@@ -17,14 +21,18 @@ Visit:
 
 - **⚡️ Fiber Native**: Built specifically for the Fiber web framework (v3).
 - **🔄 Full Protocol Support**: Implements the complete Inertia.js spec.
-  - **Asset Versioning**: Auto-reloads assets when versions change.
-  - **Partial Reloads**: Only fetch the data you need.
-  - **Lazy Evaluation**: Compute expensive props only when requested.
-  - **Shared Data**: Global props (like "auth.user") available to all pages.
+    - **Asset Versioning**: Auto-reloads assets when versions change.
+    - **Partial Reloads**: Only fetch the data you need.
+    - **Lazy / Deferred / Once**: Compute expensive props only when requested.
+    - **Merge & Scroll Props**: Built-in support for v2 merge and infinite scroll metadata.
+    - **Shared Data**: Global props (like "auth.user") available to all pages.
 - **🛡️ Validation & Flash**: Built-in helpers for form validation errors and flash messages.
 - **🚀 Server-Side Rendering (SSR)**: Native support for rendering initial HTML on the server.
 - **🔒 CSRF Protection**: Hooks for CSRF token injection and verification.
 - **🐛 Error Handling**: Customizable error pages and unified error handling middleware.
+- **🛠 Developer Experience**:
+    - `WithDevMode()` for hot-reloading templates and assets.
+    - Fail-fast validation at startup (`NewWithValidation`).
 
 ## Installation
 
@@ -40,44 +48,46 @@ Here is a minimal example showing how to set up the Inertia middleware and rende
 package main
 
 import (
-  "github.com/gofiber/fiber/v3"
-  "github.com/assurrussa/goinertia"
+	"github.com/gofiber/fiber/v3"
+	"github.com/assurrussa/goinertia"
 )
 
 func main() {
-  // 1. Initialize Inertia
-  inertiaManager, err := goinertia.NewWithValidation("http://localhost:3000",
-    goinertia.WithAssetVersion("v1"),
-    goinertia.WithSharedProps(map[string]any{
-      "appName": "My App",
-    }),
-  // goinertia.WithDevMode(), // Use in development to enable hot-reloading
-    )
-    if err != nil {
-        panic(err)
-    }
+	// 1. Initialize Inertia
+	inertiaManager, err := goinertia.NewWithValidation("http://localhost:3000",
+		goinertia.WithAssetVersion("v1"),
+		goinertia.WithSharedProps(map[string]any{
+			"appName": "My App",
+		}),
+		// goinertia.WithDevMode(), // Use in development to enable hot-reloading
+	)
+	if err != nil {
+		panic(err)
+	}
 
-  // 2. Register Middleware
-  app := fiber.New(fiber.Config{ErrorHandler: inertiaManager.MiddlewareErrorListener()})
-  // Handles Inertia requests, asset versioning, and validation redirects
-  app.Use(inertiaManager.Middleware())
+	// 2. Register Middleware
+	app := fiber.New(fiber.Config{ErrorHandler: inertiaManager.MiddlewareErrorListener()})
+	// Handles Inertia requests, asset versioning, and validation redirects
+	app.Use(inertiaManager.Middleware())
 
-  // 3. Define Routes
-  app.Get("/", func(c fiber.Ctx) error {
-    // Render a Vue/React component named "Home"
-    return inertiaManager.Render(c, "Home", map[string]any{
-      "user": "John Doe",
-    })
-  })
+	// 3. Define Routes
+	app.Get("/", func(c fiber.Ctx) error {
+		// Render a Vue/React component named "Home"
+		return inertiaManager.Render(c, "Home", map[string]any{
+			"user": "John Doe",
+		})
+	})
 
-  app.Listen(":3000")
+	app.Listen(":3000")
 }
 ```
 
 ## Core Concepts
 
 ### Rendering Pages
-Use the `Render` method to return an Inertia response. If it's an XHR request, it returns JSON; otherwise, it renders the root HTML template.
+
+Use the `Render` method to return an Inertia response. If it's an XHR request, it returns JSON; otherwise, it renders
+the root HTML template.
 
 ```go
 inertiaManager.Render(ctx, "Dashboard/Index", map[string]any{
@@ -86,6 +96,7 @@ inertiaManager.Render(ctx, "Dashboard/Index", map[string]any{
 ```
 
 ### Flash Messages & Validation
+
 `goinertia` provides helpers to seamlessly pass data to the client, especially after form submissions.
 
 > **Note**: Requires `WithSessionStore` to be configured.
@@ -103,31 +114,65 @@ return inertiaManager.Redirect(ctx, "/profile")
 ```
 
 ### Lazy Evaluation
-Optimize performance by wrapping expensive data in `WithLazyProp`. These are only executed if the client explicitly requests them via a partial reload.
+
+Optimize performance by wrapping expensive data in `WithLazyProp`. These are only executed if the client explicitly
+requests them via a partial reload.
 
 ```go
-inertiaManager.WithLazyProp(ctx, "heavyData", func(c context.Context) (any, error) {
+inertiaManager.WithLazyProp(ctx, "heavyData", func (c context.Context) (any, error) {
 return heavyDatabaseQuery(), nil
 })
 ```
 
 ### Server-Side Rendering (SSR)
-Enable SSR to improve SEO and initial load performance. `goinertia` communicates with a Node.js process (the Inertia SSR server) to render the page.
+
+Enable SSR to improve SEO and initial load performance. `goinertia` communicates with a Node.js process (the Inertia SSR
+server) to render the page.
 
 ```go
-inertiaManager := goinertia.New(url,
+inertiaManager := goinertia.Must(goinertia.NewWithValidation(url,
 goinertia.WithSSRConfig(goinertia.SSRConfig{
-URL:     "http://127.0.0.1:13714",
-Timeout: 3 * time.Second,
+URL:             "http://127.0.0.1:13714/render", // or goinertia.DefaultSSRURL,
+Timeout:         3 * time.Second,
+CacheTTL:        5 * time.Minute,
+CacheMaxEntries: 1024,
+MaxRetries:      2,
+RetryDelay:      50 * time.Millisecond,
+RetryStatuses:   []int{http.StatusTooManyRequests, http.StatusServiceUnavailable},
+// DisableRetries:  true,
+// SSRClient:       createClient...,
 }),
-)
+))
 ```
+
+## Protocol Coverage (Inertia)
+
+Supported:
+
+- Core headers: `X-Inertia`, `X-Inertia-Version`, `X-Inertia-Location`, `Vary: X-Inertia`.
+- Partial reloads: `X-Inertia-Partial-Component`, `X-Inertia-Partial-Data`, `X-Inertia-Partial-Except`.
+- Partial control: `X-Inertia-Reset`, `X-Inertia-Error-Bag`, `X-Inertia-Except-Once-Props`,
+  `X-Inertia-Infinite-Scroll-Merge-Intent`.
+- Page object v2 fields: `deferredProps`, `mergeProps`, `prependProps`, `deepMergeProps`,
+  `matchPropsOn`, `scrollProps`, `onceProps`, plus `encryptHistory/clearHistory`.
+- Redirect semantics: internal redirects (302/303) and external redirects (409 + `X-Inertia-Location`).
+- `errors` always included (empty object by default).
+
+Not yet implemented:
+
+- Precognition headers/flow (`Precognition`, `Precognition-Validate-Only`, `Precognition-Success`,
+  `Vary: Precognition`).
+- Explicit API helpers for `encryptHistory` / `clearHistory` (fields are present in the page object).
+- `Cache-Control: no-cache` handling for reload requests (if you rely on proxy caches).
+
+If you need any of the missing items, open an issue or PR.
 
 ## Documentation
 
 Comprehensive documentation is available in the `docs/` directory:
 
 - [Basic Setup](docs/basic.md)
+- [Configuration Options](docs/options.md)
 - [Flash Messages](docs/flash.md)
 - [Validation & Redirects](docs/validation.md)
 - [Handling 409 Conflicts](docs/redirect-409.md)
@@ -137,7 +182,10 @@ Comprehensive documentation is available in the `docs/` directory:
 ## Examples
 
 Check the `examples/` directory for fully functional sample applications:
-- **basic-app**: [A simple app](examples/basic-app/main.go) implementation showing routing, layout, and props.
+
+- **basic-app**: [A simple vue app](examples/basic-app/main.go) implementation showing routing, layout, and props.
+- **basic-app-ssr**: [A simple vue app with SSR](examples/basic-app-ssr/main.go) implementation showing routing, layout,
+  and props.
 
 ## License
 

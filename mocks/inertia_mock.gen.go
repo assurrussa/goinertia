@@ -321,3 +321,55 @@ func (mr *MockLoggerMockRecorder) WarnContext(ctx, msg any, args ...any) *gomock
 	varargs := append([]any{ctx, msg}, args...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WarnContext", reflect.TypeOf((*MockLogger)(nil).WarnContext), varargs...)
 }
+
+// MockSSRClient is a mock of SSRClient interface.
+type MockSSRClient struct {
+	ctrl     *gomock.Controller
+	recorder *MockSSRClientMockRecorder
+	isgomock struct{}
+}
+
+// MockSSRClientMockRecorder is the mock recorder for MockSSRClient.
+type MockSSRClientMockRecorder struct {
+	mock *MockSSRClient
+}
+
+// NewMockSSRClient creates a new mock instance.
+func NewMockSSRClient(ctrl *gomock.Controller) *MockSSRClient {
+	mock := &MockSSRClient{ctrl: ctrl}
+	mock.recorder = &MockSSRClientMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSSRClient) EXPECT() *MockSSRClientMockRecorder {
+	return m.recorder
+}
+
+// Post mocks base method.
+func (m *MockSSRClient) Post(ctx context.Context, url string, body []byte, headers map[string]string) (int, []byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Post", ctx, url, body, headers)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].([]byte)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// Post indicates an expected call of Post.
+func (mr *MockSSRClientMockRecorder) Post(ctx, url, body, headers any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Post", reflect.TypeOf((*MockSSRClient)(nil).Post), ctx, url, body, headers)
+}
+
+// Reset mocks base method.
+func (m *MockSSRClient) Reset() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Reset")
+}
+
+// Reset indicates an expected call of Reset.
+func (mr *MockSSRClientMockRecorder) Reset() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reset", reflect.TypeOf((*MockSSRClient)(nil).Reset))
+}

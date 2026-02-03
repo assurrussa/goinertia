@@ -1,8 +1,7 @@
 <template>
   <div>
     <h1>{{ title }}</h1>
-    <p>Welcome to the Home page.</p>
-    <a href="/undefined-page">Example link to a non-existent page</a>
+    <p>Settings page content.</p>
   </div>
 </template>
 

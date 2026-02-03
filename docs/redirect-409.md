@@ -1,8 +1,11 @@
 # Redirects and 409 Conflict
 
-Inertia.js uses a special mechanism for redirects during non-GET requests (like POST, PUT, DELETE) or when a state conflict occurs. One common case is when a requested page is not found or a validation error occurs during a background request.
+Inertia.js distinguishes **internal redirects** from **external redirects**:
 
-The server returns an HTTP **409 Conflict** status with an `X-Inertia-Location` header. The Inertia client-side library automatically intercepts this and performs a full page visit to the provided location.
+- **Internal redirects** (same Inertia app) should be standard `302`/`303` responses.
+- **External redirects** (force full reload) use **409 Conflict** with `X-Inertia-Location`.
+
+In addition, a **409 Conflict** is used when the asset version changes (version mismatch).
 
 ## Session Configuration
 
@@ -64,7 +67,7 @@ inertiaAdapter := goinertia.New("http://localhost:8080",
 )
 ```
 
-## Usage Example: Redirecting with Error
+## Usage Example: Internal Redirect with Error
 
 When a conflict occurs (e.g., resource not found), set a flash message and redirect.
 
@@ -73,8 +76,18 @@ func (c *Controller) HandleNotFound(ctx fiber.Ctx) error {
     // Set a flash message that will survive the redirect
     c.inertia.WithFlashError(ctx, "The requested resource was not found.")
     
-    // inertia.Redirect will return 409 Conflict for Inertia requests
+    // inertia.Redirect will return 302/303 for Inertia requests
     return c.inertia.Redirect(ctx, "/")
+}
+```
+
+## Usage Example: External Redirect
+
+Use 409 when you need a full reload (external domain or leaving the app).
+
+```go
+func (c *Controller) Logout(ctx fiber.Ctx) error {
+    return c.inertia.RedirectExternal(ctx, "https://example.com")
 }
 ```
 
@@ -101,6 +114,6 @@ const page = usePage()
 ```
 
 When the user clicks a link that triggers the `HandleNotFound` logic:
-1. The server responds with `409 Conflict`.
-2. The Inertia client sees the 409 and fetches `/` (Home).
-3. The Home page is rendered with the flash error prop populated from the session.
+1. The server responds with `302` (or `303` for non‑GET).
+2. The Inertia client follows the redirect.
+3. The target page is rendered with the flash error prop populated from the session.

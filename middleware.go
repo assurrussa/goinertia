@@ -121,6 +121,5 @@ func (i *Inertia) isMethodPost(method string) bool {
 
 func (i *Inertia) isRedirectStatus(statusCode int) bool {
 	return statusCode == fiber.StatusFound ||
-		statusCode == fiber.StatusMovedPermanently ||
-		statusCode == fiber.StatusConflict
+		statusCode == fiber.StatusMovedPermanently
 }

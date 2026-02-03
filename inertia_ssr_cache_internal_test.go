@@ -90,7 +90,51 @@ func TestSSRCache_MaxEntries(t *testing.T) {
 	cache.Set("key-2", &SsrDTO{Body: "body-2"})
 	cache.Set("key-3", &SsrDTO{Body: "body-3"})
 
-	cache.mu.RLock()
-	defer cache.mu.RUnlock()
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
 	assert.LessOrEqual(t, len(cache.items), 2)
+}
+
+func TestSSRCache_LRU(t *testing.T) {
+	t.Parallel()
+
+	cache := newSSRCache(100*time.Millisecond, 2)
+	require.NotNil(t, cache)
+
+	cache.Set("key-1", &SsrDTO{Body: "body-1"})
+	cache.Set("key-2", &SsrDTO{Body: "body-2"})
+
+	_, ok := cache.Get("key-1") // key-2 becomes LRU
+	require.True(t, ok)
+
+	cache.Set("key-3", &SsrDTO{Body: "body-3"})
+
+	_, ok = cache.Get("key-2")
+	assert.False(t, ok)
+	_, ok = cache.Get("key-1")
+	assert.True(t, ok)
+	_, ok = cache.Get("key-3")
+	assert.True(t, ok)
+}
+
+func TestSSRCache_EvictExpiredBeforeLRU(t *testing.T) {
+	t.Parallel()
+
+	cache := newSSRCache(40*time.Millisecond, 2)
+	require.NotNil(t, cache)
+
+	cache.Set("key-1", &SsrDTO{Body: "body-1"})
+	time.Sleep(25 * time.Millisecond)
+
+	cache.Set("key-2", &SsrDTO{Body: "body-2"})
+	time.Sleep(25 * time.Millisecond) // key-1 expired, key-2 still valid
+
+	cache.Set("key-3", &SsrDTO{Body: "body-3"})
+
+	_, ok := cache.Get("key-1")
+	assert.False(t, ok)
+	_, ok = cache.Get("key-2")
+	assert.True(t, ok)
+	_, ok = cache.Get("key-3")
+	assert.True(t, ok)
 }

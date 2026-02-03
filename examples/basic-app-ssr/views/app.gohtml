@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>goinertia basic app</title>
+    {{ if .processSSR }}
+        {{ range .processSSR.Head }}
+            {{ raw . }}
+        {{ end }}
+    {{ end }}
+    {{ if .hotServerUrl }}
+    {{/* Vite dev server */}}
+    <script type="module" src="/@vite/client"></script>
+    <script type="module" src="/src/js/app.ts"></script>
+    {{ else }}
+    {{/* Production - use compiled assets */}}
+    <link href="{{ asset "app.css" }}" rel="stylesheet">
+    <script type="module" src="{{ asset "app.js" }}"></script>
+    {{ end }}
+</head>
+<body>
+{{ if .processSSR }}
+    {{ raw .processSSR.Body }}
+{{ else }}
+<div id="app" data-page="{{ marshal .page }}"></div>
+{{ end }}
+</body>
+</html>
