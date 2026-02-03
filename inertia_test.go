@@ -70,6 +70,19 @@ func TestInertia_WithHot_WithoutPublicFS(t *testing.T) {
 	)
 }
 
+func TestInertia_ParseTemplates(t *testing.T) {
+	t.Parallel()
+
+	ta := inertiat.NewTestApp(t)
+	require.NoError(t, ta.Inrt.ParseTemplates())
+
+	ta = inertiat.NewTestApp(t, goinertia.WithRootTemplate("errorpath.html"))
+	require.Error(t, ta.Inrt.ParseTemplates())
+
+	ta = inertiat.NewTestApp(t, goinertia.WithRootErrorTemplate("errorpath.html"))
+	require.Error(t, ta.Inrt.ParseTemplates())
+}
+
 func TestInertia_DefaultCanExpose(t *testing.T) {
 	t.Parallel()
 
@@ -363,6 +376,9 @@ func testInertia(t *testing.T, opts ...goinertia.Option) {
 	t.Helper()
 
 	ta := inertiat.NewTestApp(t, opts...)
+
+	require.NoError(t, ta.Inrt.ParseTemplates())
+
 	//nolint:bodyclose // tests
 	resp, body := ta.DoGet(func(c fiber.Ctx) error {
 		return ta.Inrt.Render(c, "Home", fiber.Map{
@@ -381,6 +397,9 @@ func testInertiaHot(t *testing.T, opts ...goinertia.Option) {
 	t.Helper()
 
 	ta := inertiat.NewTestApp(t, opts...)
+
+	require.NoError(t, ta.Inrt.ParseTemplates())
+
 	//nolint:bodyclose // tests
 	resp, body := ta.DoGet(func(c fiber.Ctx) error {
 		return ta.Inrt.Render(c, "Home", fiber.Map{

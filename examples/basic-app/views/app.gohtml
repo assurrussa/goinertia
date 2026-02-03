@@ -4,10 +4,17 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>goinertia basic app</title>
-    <link rel="stylesheet" href="/assets/app.css">
+    {{ if .hotServerUrl }}
+    {{/* Vite dev server */}}
+    <script type="module" src="/@vite/client"></script>
+    <script type="module" src="/src/js/app.ts"></script>
+    {{ else }}
+    {{/* Production - use compiled assets */}}
+    <link href="{{ asset "app.css" }}" rel="stylesheet">
+    <script type="module" src="{{ asset "app.js" }}"></script>
+    {{ end }}
 </head>
 <body>
 <div id="app" data-page="{{ marshal .page }}"></div>
-<script type="module" src="/assets/app.js"></script>
 </body>
 </html>
