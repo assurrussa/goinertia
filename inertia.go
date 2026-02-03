@@ -13,7 +13,6 @@ import (
 
 	"github.com/goccy/go-json"
 	"github.com/gofiber/fiber/v3"
-	fiberclient "github.com/gofiber/fiber/v3/client"
 
 	"github.com/assurrussa/goinertia/public"
 )
@@ -44,7 +43,7 @@ type Inertia struct {
 	templateFS                fs.FS
 	publicFS                  fs.ReadFileFS
 	ssrConfig                 SSRConfig
-	ssrClient                 *fiberclient.Client
+	ssrClient                 SSRClient
 	ssrCache                  *ssrCache
 	sessionStore              SessionStore // Adds session support.
 	logger                    Logger

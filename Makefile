@@ -2,7 +2,10 @@
 GO_MODULE := $(shell go list -m)
 GO_FILES := $(shell find . -type f -name '*.go')
 
-check: generate fmt vet lint test test-race cover-html
+check: tidy generate fmt vet lint test test-race cover-html
+
+tidy:
+	go mod tidy
 
 generate:
 	go generate ./...

@@ -1,9 +1,11 @@
 package goinertia
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"strings"
+	"time"
 
 	"github.com/goccy/go-json"
 	"github.com/gofiber/fiber/v3"
@@ -54,4 +56,13 @@ func raw(v any) (template.HTML, error) {
 	default:
 		return "", fmt.Errorf("unsupported type for raw template function: %T", v)
 	}
+}
+
+func sleeper(c context.Context, sleep time.Duration) error {
+	select {
+	case <-c.Done():
+		return c.Err()
+	case <-time.After(sleep):
+	}
+	return nil
 }

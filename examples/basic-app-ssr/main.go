@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/session"
@@ -77,20 +78,30 @@ func main() {
 		goinertia.WithFS(viewFS),
 		goinertia.WithRootTemplate("app.gohtml"),
 		goinertia.WithRootErrorTemplate("error.gohtml"),
-		goinertia.WithSessionStore(sessionAdapter),
 		goinertia.WithCanExposeDetails(func(_ context.Context, _ map[string][]string) bool {
 			// If you need to display errors as they are. true/false
-			return false
+			return true
 		}),
+		goinertia.WithSessionStore(sessionAdapter),
 		// global props
 		goinertia.WithSharedProps(map[string]any{
 			"menu": menu,
+		}),
+		// Enable SSR with custom client and cache
+		goinertia.WithSSRConfig(goinertia.SSRConfig{
+			URL:             goinertia.DefaultSSRURL,
+			Timeout:         goinertia.DefaultSSRTimeout,
+			CacheTTL:        1 * time.Minute,
+			CacheMaxEntries: 1024,
+			// SSRClient:       createClient...,
 		}),
 		// for example shared func
 		goinertia.WithSetSharedFuncMap(map[string]any{
 			"asset": asset(folderPublicPath),
 		}),
 	))
+
+	// inertiaAdapter.EnableSSRWithDefault() // or used default settings
 
 	app := fiber.New(fiber.Config{ErrorHandler: inertiaAdapter.MiddlewareErrorListener()})
 	app.Get("/assets/*", static.New(folderPublicPath))

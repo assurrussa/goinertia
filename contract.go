@@ -38,3 +38,8 @@ type Logger interface {
 	WarnContext(ctx context.Context, msg string, args ...any)
 	ErrorContext(ctx context.Context, msg string, args ...any)
 }
+
+type SSRClient interface {
+	Reset()
+	Post(ctx context.Context, url string, body []byte, headers map[string]string) (int, []byte, error)
+}

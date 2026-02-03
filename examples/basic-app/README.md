@@ -15,5 +15,5 @@ go run ./goinertia/examples/basic-app
 
 Then open:
 
-- http://localhost:8080/ (HTML response)
+- http://localhost:8383/ (HTML response)
 - Use an Inertia client to make X-Inertia requests if needed.

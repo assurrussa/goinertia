@@ -25,6 +25,9 @@ Visit:
 - **🚀 Server-Side Rendering (SSR)**: Native support for rendering initial HTML on the server.
 - **🔒 CSRF Protection**: Hooks for CSRF token injection and verification.
 - **🐛 Error Handling**: Customizable error pages and unified error handling middleware.
+- **🛠 Developer Experience**:
+  - `WithDevMode()` for hot-reloading templates and assets.
+  - Fail-fast validation at startup (`NewWithValidation`).
 
 ## Installation
 
@@ -115,19 +118,26 @@ return heavyDatabaseQuery(), nil
 Enable SSR to improve SEO and initial load performance. `goinertia` communicates with a Node.js process (the Inertia SSR server) to render the page.
 
 ```go
-inertiaManager := goinertia.New(url,
-goinertia.WithSSRConfig(goinertia.SSRConfig{
-URL:     "http://127.0.0.1:13714",
-Timeout: 3 * time.Second,
-}),
-)
+inertiaManager := goinertia.Must(goinertia.NewWithValidation(url,
+    goinertia.WithSSRConfig(goinertia.SSRConfig{
+        URL:             "http://127.0.0.1:13714/render", // or goinertia.DefaultSSRURL,
+        Timeout:         3 * time.Second,
+        CacheTTL:        5 * time.Minute,
+        CacheMaxEntries: 1024,
+        MaxRetries:      2,
+        RetryDelay:      50 * time.Millisecond,
+        RetryStatuses:   []int{http.StatusTooManyRequests, http.StatusServiceUnavailable},
+        // DisableRetries:  true,
+        // SSRClient:       createClient...,
+    }),
+))
 ```
-
 ## Documentation
 
 Comprehensive documentation is available in the `docs/` directory:
 
 - [Basic Setup](docs/basic.md)
+- [Configuration Options](docs/options.md)
 - [Flash Messages](docs/flash.md)
 - [Validation & Redirects](docs/validation.md)
 - [Handling 409 Conflicts](docs/redirect-409.md)
@@ -137,7 +147,8 @@ Comprehensive documentation is available in the `docs/` directory:
 ## Examples
 
 Check the `examples/` directory for fully functional sample applications:
-- **basic-app**: [A simple app](examples/basic-app/main.go) implementation showing routing, layout, and props.
+- **basic-app**: [A simple vue app](examples/basic-app/main.go) implementation showing routing, layout, and props.
+- **basic-app-ssr**: [A simple vue app with SSR](examples/basic-app-ssr/main.go) implementation showing routing, layout, and props.
 
 ## License
 
