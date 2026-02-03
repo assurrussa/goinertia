@@ -10,12 +10,15 @@ import (
 )
 
 func main() {
-    inertiaAdapter := goinertia.New("http://localhost:3000",
+    inertiaAdapter, err := goinertia.NewWithValidation("http://localhost:3000",
         goinertia.WithAssetVersion("v1.0.0"),
         goinertia.WithSharedProps(map[string]any{
             "appName": "My App",
         }),
     )
+    if err != nil {
+        panic(err)
+    }
 
 	app := fiber.New(fiber.Config{ErrorHandler: inertiaAdapter.MiddlewareErrorListener()})
 

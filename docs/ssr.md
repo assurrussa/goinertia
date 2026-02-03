@@ -1,7 +1,7 @@
 # SSR
 
 ```go
-inertiaAdapter := goinertia.New("http://localhost:3000",
+inertiaAdapter, err := goinertia.NewWithValidation("http://localhost:3000",
     goinertia.WithSSRConfig(goinertia.SSRConfig{
         URL:             "http://127.0.0.1:13714",
         Timeout:         3 * time.Second,
@@ -10,4 +10,7 @@ inertiaAdapter := goinertia.New("http://localhost:3000",
         CacheMaxEntries: 256,
     }),
 )
+if err != nil {
+    panic(err)
+}
 ```
