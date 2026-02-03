@@ -9,7 +9,7 @@
         <meta name="test-key-meta" content="{{ .testViewDataKey }}">
     {{ end }}
 
-    {{ if .viteDevServer }}
+    {{ if .hotServerUrl }}
     {{/* Vite dev server */}}
     <script type="module" src="/@vite/client"></script>
     <script type="module" src="/src/js/app.js"></script>

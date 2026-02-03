@@ -179,3 +179,11 @@ func WithSSRConfig(cfg SSRConfig) Option {
 		i.EnableSSR(cfg)
 	}
 }
+
+// WithDevMode enables development mode.
+// In this mode, the Vite hot file is checked on every request, allowing for dynamic starts/restarts of the Vite server.
+func WithDevMode() Option {
+	return func(i *Inertia) {
+		i.isDev = true
+	}
+}

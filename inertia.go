@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/goccy/go-json"
 	"github.com/gofiber/fiber/v3"
@@ -33,7 +34,13 @@ type Inertia struct {
 	sharedFuncMap             template.FuncMap
 	sharedViewData            map[string]any
 	parsedTemplate            *template.Template
+	parsedTemplateOnce        sync.Once
+	parsedTemplateErr         error
 	parsedErrorTemplate       *template.Template
+	parsedErrorTemplateOnce   sync.Once
+	parsedErrorTemplateErr    error
+	hotURL                    string
+	hotURLOnce                sync.Once
 	templateFS                fs.FS
 	publicFS                  fs.ReadFileFS
 	ssrConfig                 SSRConfig
@@ -47,6 +54,24 @@ type Inertia struct {
 	csrfTokenCheckProvider    CSRFTokenCheckProvider
 	csrfTokenProvider         CSRFTokenProvider
 	csrfPropName              string
+	isDev                     bool
+}
+
+func Must(inr *Inertia, err error) *Inertia {
+	if err != nil {
+		panic(err)
+	}
+
+	return inr
+}
+
+func NewWithValidation(baseURL string, opts ...Option) (*Inertia, error) {
+	inr := New(baseURL, opts...)
+	if err := inr.ParseTemplates(); err != nil {
+		return nil, fmt.Errorf("failed to parse templates: %w", err)
+	}
+
+	return inr, nil
 }
 
 // New init inertia
@@ -109,6 +134,22 @@ func New(baseURL string, opts ...Option) *Inertia {
 	inr.registerCSRFSharedProp()
 
 	return inr
+}
+
+func (i *Inertia) ParseTemplates() error {
+	var err error
+
+	_, err = i.createRootTemplate()
+	if err != nil {
+		return err
+	}
+
+	_, err = i.createRootErrorTemplate()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (i *Inertia) WithProp(c fiber.Ctx, key string, value any) {
@@ -593,26 +634,32 @@ func (i *Inertia) createRootTemplate() (*template.Template, error) {
 		return i.parsedTemplate, nil
 	}
 
-	ts := template.New(filepath.Base(i.rootTemplate)).Funcs(i.sharedFuncMap)
+	parse := func() (*template.Template, error) {
+		ts := template.New(filepath.Base(i.rootTemplate)).Funcs(i.sharedFuncMap)
 
-	var tpl *template.Template
-	var err error
+		var tpl *template.Template
+		var err error
+		if i.templateFS != nil {
+			tpl, err = ts.ParseFS(i.templateFS, i.rootTemplate)
+		} else {
+			tpl, err = ts.ParseFiles(i.rootTemplate)
+		}
 
-	if i.templateFS != nil {
-		tpl, err = ts.ParseFS(i.templateFS, i.rootTemplate)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing ParseFS root template: %w", err)
+			return nil, fmt.Errorf("error parsing root template: %w", err)
 		}
-	} else {
-		tpl, err = ts.ParseFiles(i.rootTemplate)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing ParseFiles root template: %w", err)
-		}
+		return tpl, nil
 	}
 
-	i.parsedTemplate = tpl
+	if i.isDev {
+		return parse()
+	}
 
-	return i.parsedTemplate, nil
+	i.parsedTemplateOnce.Do(func() {
+		i.parsedTemplate, i.parsedTemplateErr = parse()
+	})
+
+	return i.parsedTemplate, i.parsedTemplateErr
 }
 
 func (i *Inertia) createRootErrorTemplate() (*template.Template, error) {
@@ -620,26 +667,32 @@ func (i *Inertia) createRootErrorTemplate() (*template.Template, error) {
 		return i.parsedErrorTemplate, nil
 	}
 
-	ts := template.New(filepath.Base(i.rootErrorTemplate)).Funcs(i.sharedFuncMap)
+	parse := func() (*template.Template, error) {
+		ts := template.New(filepath.Base(i.rootErrorTemplate)).Funcs(i.sharedFuncMap)
 
-	var tpl *template.Template
-	var err error
+		var tpl *template.Template
+		var err error
+		if i.templateFS != nil {
+			tpl, err = ts.ParseFS(i.templateFS, i.rootErrorTemplate)
+		} else {
+			tpl, err = ts.ParseFiles(i.rootErrorTemplate)
+		}
 
-	if i.templateFS != nil {
-		tpl, err = ts.ParseFS(i.templateFS, i.rootErrorTemplate)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing ParseFS root template: %w", err)
+			return nil, fmt.Errorf("error parsing root error template: %w", err)
 		}
-	} else {
-		tpl, err = ts.ParseFiles(i.rootErrorTemplate)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing ParseFiles root template: %w", err)
-		}
+		return tpl, nil
 	}
 
-	i.parsedErrorTemplate = tpl
+	if i.isDev {
+		return parse()
+	}
 
-	return i.parsedErrorTemplate, nil
+	i.parsedErrorTemplateOnce.Do(func() {
+		i.parsedErrorTemplate, i.parsedErrorTemplateErr = parse()
+	})
+
+	return i.parsedErrorTemplate, i.parsedErrorTemplateErr
 }
 
 func (i *Inertia) createViewData(c fiber.Ctx) (map[string]any, error) {
@@ -665,24 +718,33 @@ func (i *Inertia) createViewData(c fiber.Ctx) (map[string]any, error) {
 
 	// Check Vite dev server.
 	if hotURL := i.hotServerURL(); hotURL != "" {
-		viewData["viteDevServer"] = hotURL
+		viewData["hotServerUrl"] = hotURL
 	}
 
 	return viewData, nil
 }
 
 func (i *Inertia) hotServerURL() string {
-	publicFSRead := os.ReadFile
-	if i.publicFS != nil {
-		publicFSRead = i.publicFS.ReadFile
+	readHotFile := func() string {
+		publicFSRead := os.ReadFile
+		if i.publicFS != nil {
+			publicFSRead = i.publicFS.ReadFile
+		}
+		if hotFile, err := publicFSRead(i.rootHotTemplate); err == nil {
+			return strings.TrimSpace(string(hotFile))
+		}
+		return ""
 	}
 
-	if hotFile, err := publicFSRead(i.rootHotTemplate); err == nil {
-		viteURL := strings.TrimSpace(string(hotFile))
-		return viteURL
+	if i.isDev {
+		return readHotFile()
 	}
 
-	return ""
+	i.hotURLOnce.Do(func() {
+		i.hotURL = readHotFile()
+	})
+
+	return i.hotURL
 }
 
 func (i *Inertia) cacheLazy(c fiber.Ctx, key string, lazy LazyProp) (any, error) {

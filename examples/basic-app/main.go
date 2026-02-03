@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/session"
@@ -106,7 +107,8 @@ func main() {
 	sessionAdapter := goinertia.NewFiberSessionAdapter(sessionProvider)
 
 	viewFS := os.DirFS(examplePath("views"))
-	inertiaAdapter := goinertia.New("http://localhost:"+*port,
+	folderPublicPath := examplePath("public")
+	inertiaAdapter := goinertia.Must(goinertia.NewWithValidation("http://localhost:"+*port,
 		goinertia.WithFS(viewFS),
 		goinertia.WithRootTemplate("app.gohtml"),
 		goinertia.WithRootErrorTemplate("error.gohtml"),
@@ -115,10 +117,14 @@ func main() {
 		goinertia.WithSharedProps(map[string]any{
 			"menu": menu,
 		}),
-	)
+		// for example shared func
+		goinertia.WithSetSharedFuncMap(map[string]any{
+			"asset": asset(folderPublicPath),
+		}),
+	))
 
 	app := fiber.New(fiber.Config{ErrorHandler: inertiaAdapter.MiddlewareErrorListener()})
-	app.Get("/assets/*", static.New(examplePath("public")))
+	app.Get("/assets/*", static.New(folderPublicPath))
 	app.Use(inertiaAdapter.Middleware())
 
 	controller := NewBaseController(inertiaAdapter)
@@ -128,6 +134,19 @@ func main() {
 	app.Get("/not-found", controller.Conflict)
 
 	log.Fatal(app.Listen(":" + *port))
+}
+
+func asset(dir string) func(path string) (string, error) {
+	return func(path string) (string, error) {
+		// for example shared func
+		filePath := filepath.Join(dir, path)
+		fs, err := os.Stat(filePath)
+		if err != nil {
+			return "", err
+		}
+		unixTime := strconv.FormatInt(fs.ModTime().Unix(), 10)
+		return "/assets/" + path + "?" + unixTime, nil
+	}
 }
 
 func examplePath(path string) string {
