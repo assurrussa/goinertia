@@ -46,12 +46,16 @@ import (
 
 func main() {
   // 1. Initialize Inertia
-  inertiaManager := goinertia.New("http://localhost:3000",
+  inertiaManager, err := goinertia.NewWithValidation("http://localhost:3000",
     goinertia.WithAssetVersion("v1"),
     goinertia.WithSharedProps(map[string]any{
       "appName": "My App",
     }),
-  )
+  // goinertia.WithDevMode(), // Use in development to enable hot-reloading
+    )
+    if err != nil {
+        panic(err)
+    }
 
   // 2. Register Middleware
   app := fiber.New(fiber.Config{ErrorHandler: inertiaManager.MiddlewareErrorListener()})
