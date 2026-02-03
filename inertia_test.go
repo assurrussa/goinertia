@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -436,8 +437,8 @@ func TestInertia_ValidationErrorMapping_GetError(t *testing.T) {
 
 	//nolint:bodyclose // tests
 	resp, body = ta.DoInertiaGet(handler, nil)
-	assert.Equal(t, fiber.StatusConflict, resp.StatusCode)
-	assert.Equal(t, `Conflict`, body)
+	assert.Equal(t, fiber.StatusFound, resp.StatusCode)
+	assert.Empty(t, body)
 }
 
 func TestInertia_CanExposeDetailsCallback(t *testing.T) {
@@ -464,8 +465,8 @@ func TestInertia_CanExposeDetailsCallback(t *testing.T) {
 	resp, body = ta.DoInertiaGet(handler, map[string]string{
 		"Referer": "/prev",
 	})
-	assert.Equal(t, fiber.StatusConflict, resp.StatusCode)
-	assert.Equal(t, `Conflict`, body)
+	assert.Equal(t, fiber.StatusFound, resp.StatusCode)
+	assert.Empty(t, body)
 
 	// 2) Non-Inertia with permission: expect HTML containing details
 	//nolint:bodyclose // tests
@@ -481,8 +482,8 @@ func TestInertia_CanExposeDetailsCallback(t *testing.T) {
 		"Referer": "/prev",
 		"X-Debug": "1",
 	})
-	assert.Equal(t, fiber.StatusConflict, resp.StatusCode)
-	assert.Equal(t, `Conflict`, body)
+	assert.Equal(t, fiber.StatusFound, resp.StatusCode)
+	assert.Empty(t, body)
 }
 
 func TestInertia_Redirect(t *testing.T) {
@@ -491,21 +492,26 @@ func TestInertia_Redirect(t *testing.T) {
 		inertiaRequest bool
 		url            string
 		expectedStatus int
-		expectedHeader string
+		external       bool
 	}{
 		{
-			name:           "inertia request should return 409 with location header",
+			name:           "inertia request should return 302 with location header",
 			inertiaRequest: true,
 			url:            "/dashboard",
+			expectedStatus: fiber.StatusFound,
+		},
+		{
+			name:           "inertia request with external URL should return 409 with X-Inertia-Location",
+			inertiaRequest: true,
+			url:            "https://example.com/dashboard",
 			expectedStatus: fiber.StatusConflict,
-			expectedHeader: "/dashboard",
+			external:       true,
 		},
 		{
 			name:           "regular request should return 302 redirect",
 			inertiaRequest: false,
 			url:            "/dashboard",
 			expectedStatus: fiber.StatusFound,
-			expectedHeader: "",
 		},
 	}
 
@@ -526,8 +532,12 @@ func TestInertia_Redirect(t *testing.T) {
 			}, headers)
 
 			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
-			if tt.expectedHeader != "" {
-				assert.Equal(t, tt.expectedHeader, resp.Header.Get(goinertia.HeaderLocation))
+			if tt.external {
+				assert.Equal(t, tt.url, resp.Header.Get(goinertia.HeaderLocation))
+				assert.Equal(t, tt.url, resp.Header.Get(fiber.HeaderLocation))
+			} else {
+				assert.Equal(t, tt.url, resp.Header.Get(fiber.HeaderLocation))
+				assert.Empty(t, resp.Header.Get(goinertia.HeaderLocation))
 			}
 		})
 	}
@@ -553,9 +563,22 @@ func TestInertia_RedirectHelpers_XHR(t *testing.T) {
 	resp, body := ta.DoInertiaGet(func(c fiber.Ctx) error {
 		return goinertia.Redirect(c, "/dashboard")
 	}, nil)
-	assert.Equal(t, http.StatusConflict, resp.StatusCode)
-	assert.Equal(t, "/dashboard", resp.Header.Get(goinertia.HeaderLocation))
+	assert.Equal(t, http.StatusFound, resp.StatusCode)
+	assert.Empty(t, resp.Header.Get(goinertia.HeaderLocation))
 	assert.Equal(t, "/dashboard", resp.Header.Get(fiber.HeaderLocation))
+	assert.Empty(t, body)
+}
+
+func TestInertia_RedirectHelpers_External(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(func(c fiber.Ctx) error {
+		return goinertia.RedirectExternal(c, "https://example.com/dashboard")
+	}, nil)
+	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+	assert.Equal(t, "https://example.com/dashboard", resp.Header.Get(goinertia.HeaderLocation))
+	assert.Equal(t, "https://example.com/dashboard", resp.Header.Get(fiber.HeaderLocation))
 	assert.Equal(t, "Conflict", body)
 }
 
@@ -566,10 +589,10 @@ func TestInertia_RedirectHelpers_Empty(t *testing.T) {
 	resp, body := ta.DoInertiaGet(func(c fiber.Ctx) error {
 		return goinertia.Redirect(c, "")
 	}, nil)
-	assert.Equal(t, http.StatusConflict, resp.StatusCode)
-	assert.Equal(t, "http://example.com", resp.Header.Get(goinertia.HeaderLocation))
+	assert.Equal(t, http.StatusFound, resp.StatusCode)
+	assert.Empty(t, resp.Header.Get(goinertia.HeaderLocation))
 	assert.Equal(t, "http://example.com", resp.Header.Get(fiber.HeaderLocation))
-	assert.Equal(t, "Conflict", body)
+	assert.Empty(t, body)
 
 	ta = inertiat.NewTestAppWithoutMiddleware(t)
 
@@ -577,10 +600,10 @@ func TestInertia_RedirectHelpers_Empty(t *testing.T) {
 	resp, body = ta.DoInertiaGet(func(c fiber.Ctx) error {
 		return goinertia.Redirect(c, "/")
 	}, nil)
-	assert.Equal(t, http.StatusConflict, resp.StatusCode)
-	assert.Equal(t, "http://example.com", resp.Header.Get(goinertia.HeaderLocation))
+	assert.Equal(t, http.StatusFound, resp.StatusCode)
+	assert.Empty(t, resp.Header.Get(goinertia.HeaderLocation))
 	assert.Equal(t, "http://example.com", resp.Header.Get(fiber.HeaderLocation))
-	assert.Equal(t, "Conflict", body)
+	assert.Empty(t, body)
 }
 
 func TestInertia_RedirectBackWithErrors(t *testing.T) {
@@ -593,8 +616,8 @@ func TestInertia_RedirectBackWithErrors(t *testing.T) {
 		return ta.Inrt.RedirectBackWithErrors(c, map[string]string{"field1": "Error 1"})
 	}, nil)
 
-	assert.Equal(t, http.StatusConflict, resp.StatusCode)
-	assert.Equal(t, "Conflict", body)
+	assert.Equal(t, http.StatusFound, resp.StatusCode)
+	assert.Empty(t, body)
 
 	//nolint:bodyclose // tests
 	resp2, body := ta.DoInertiaGet(func(c fiber.Ctx) error {
@@ -626,8 +649,8 @@ func TestInertia_SessionError(t *testing.T) {
 		return ta.Inrt.RedirectBackWithErrors(c, map[string]string{"field1": "Error 1"})
 	}, nil)
 
-	assert.Equal(t, http.StatusConflict, resp.StatusCode)
-	assert.Equal(t, "Conflict", body)
+	assert.Equal(t, http.StatusFound, resp.StatusCode)
+	assert.Empty(t, body)
 
 	//nolint:bodyclose // tests
 	resp2, body := ta.DoInertiaGet(func(c fiber.Ctx) error {
@@ -641,8 +664,9 @@ func TestInertia_SessionError(t *testing.T) {
 	page := inertiat.DecodePage(t, body)
 	assert.Equal(t, "TestComponent", page.Component)
 	assert.Equal(t, "John", page.Props["user"])
-	_, ok := page.Props["errors"].(map[string]any)
-	require.False(t, ok)
+	errs, ok := page.Props["errors"].(map[string]any)
+	require.True(t, ok)
+	assert.Empty(t, errs)
 }
 
 func TestInertia_RedirectBackWithValidationErrors(t *testing.T) {
@@ -655,8 +679,8 @@ func TestInertia_RedirectBackWithValidationErrors(t *testing.T) {
 		return ta.Inrt.RedirectBackWithValidationErrors(c, goinertia.ValidationErrors{"field1": {"Error 1"}})
 	}, nil)
 
-	assert.Equal(t, http.StatusConflict, resp.StatusCode)
-	assert.Equal(t, "Conflict", body)
+	assert.Equal(t, http.StatusFound, resp.StatusCode)
+	assert.Empty(t, body)
 
 	//nolint:bodyclose // tests
 	resp2, body := ta.DoInertiaGet(func(c fiber.Ctx) error {
@@ -721,14 +745,14 @@ func TestInertia_RedirectBack(t *testing.T) {
 			inertiaRequest: true,
 			referer:        "/previous-page",
 			expectedURL:    "/previous-page",
-			expectedStatus: fiber.StatusConflict,
+			expectedStatus: fiber.StatusFound,
 		},
 		{
 			name:           "inertia request without referer uses base URL",
 			inertiaRequest: true,
 			referer:        "",
 			expectedURL:    "/test",
-			expectedStatus: fiber.StatusConflict,
+			expectedStatus: fiber.StatusFound,
 		},
 		{
 			name:           "regular request with referer",
@@ -774,7 +798,7 @@ func TestInertia_RedirectBack(t *testing.T) {
 
 			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
 			if tt.expectedURL != "" {
-				assert.Equal(t, tt.expectedURL, resp.Header.Get(goinertia.HeaderLocation))
+				assert.Equal(t, tt.expectedURL, resp.Header.Get(fiber.HeaderLocation))
 			}
 		})
 	}
@@ -983,7 +1007,7 @@ func TestInertia_Flash_WithXHR_Get(t *testing.T) {
 	}, map[string]string{
 		"path": "/set",
 	})
-	require.Equal(t, http.StatusConflict, resp1.StatusCode)
+	require.Equal(t, http.StatusFound, resp1.StatusCode)
 
 	// Second request: read page props (flash should be loaded from session)
 	//nolint:bodyclose // tests
@@ -1038,7 +1062,7 @@ func TestInertia_Flash_InvalidVersion_Post(t *testing.T) {
 		return ta.Inrt.RedirectBack(c)
 	}, req)
 	require.Equal(t, http.StatusSeeOther, resp1.StatusCode)
-	require.Equal(t, "/test", resp1.Header.Get(goinertia.HeaderLocation))
+	require.Equal(t, "/test", resp1.Header.Get(fiber.HeaderLocation))
 }
 
 func TestInertia_Flash_WithXHR_Post(t *testing.T) {
@@ -1372,6 +1396,147 @@ func TestInertia_CSRFTokenProvider_Empty(t *testing.T) {
 	page := inertiat.DecodePage(t, body)
 	_, ok := page.Props[goinertia.ContextPropsCSRFToken]
 	assert.True(t, ok)
+}
+
+func TestInertia_PartialExcept_Precedence(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"foo": "a",
+			"bar": "b",
+			"baz": "c",
+		})
+	}, map[string]string{
+		goinertia.HeaderPartialComponent: "Home",
+		goinertia.HeaderPartialOnly:      "bar",
+		goinertia.HeaderPartialExcept:    "foo",
+	})
+
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	assert.Equal(t, "b", page.Props["bar"])
+	assert.Equal(t, "c", page.Props["baz"])
+	_, ok := page.Props["foo"]
+	assert.False(t, ok)
+}
+
+func TestInertia_DeferredProps(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+	var calls int32
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"eager": "ok",
+			"lazy": goinertia.Defer(goinertia.LazyProp{
+				Key: "lazy",
+				Fn: func(_ context.Context) (any, error) {
+					atomic.AddInt32(&calls, 1)
+					return "value", nil
+				},
+			}),
+		})
+	}
+
+	// Full response should not include deferred prop.
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(handler, nil)
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	_, ok := page.Props["lazy"]
+	assert.False(t, ok)
+	assert.Equal(t, int32(0), atomic.LoadInt32(&calls))
+	group, ok := page.DeferredProps["default"]
+	require.True(t, ok)
+	assert.Contains(t, group, "lazy")
+
+	// Explicit partial reload should include deferred prop.
+	//nolint:bodyclose // tests
+	resp, body = ta.DoInertiaGet(handler, map[string]string{
+		goinertia.HeaderPartialComponent: "Home",
+		goinertia.HeaderPartialOnly:      "lazy",
+	})
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page = inertiat.DecodePage(t, body)
+	assert.Equal(t, "value", page.Props["lazy"])
+	assert.Equal(t, int32(1), atomic.LoadInt32(&calls))
+}
+
+func TestInertia_OnceProps(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"plans": goinertia.Once("basic", goinertia.WithOnceKey("plans_v1")),
+		})
+	}
+
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(handler, nil)
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	assert.Equal(t, "basic", page.Props["plans"])
+	cfg, ok := page.OnceProps["plans_v1"]
+	require.True(t, ok)
+	assert.Equal(t, "plans", cfg.Prop)
+
+	// Skip once prop if client already has it.
+	//nolint:bodyclose // tests
+	resp, body = ta.DoInertiaGet(handler, map[string]string{
+		goinertia.HeaderExceptOnceProps: "plans_v1",
+	})
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page = inertiat.DecodePage(t, body)
+	_, ok = page.Props["plans"]
+	assert.False(t, ok)
+	_, ok = page.OnceProps["plans_v1"]
+	assert.True(t, ok)
+}
+
+func TestInertia_ErrorBag(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(func(c fiber.Ctx) error {
+		ta.Inrt.WithErrors(c, map[string]string{"email": "Invalid"})
+		return ta.Inrt.Render(c, "Home", map[string]any{})
+	}, map[string]string{
+		goinertia.HeaderErrorBag: "login",
+	})
+
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	errorsProp, ok := page.Props["errors"].(map[string]any)
+	require.True(t, ok)
+	bag, ok := errorsProp["login"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "Invalid", bag["email"])
+}
+
+func TestInertia_ResetMergeProps(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"items": goinertia.Merge([]int{1, 2, 3}),
+		})
+	}
+
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(handler, nil)
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	assert.Contains(t, page.MergeProps, "items")
+
+	// Reset should remove merge metadata for this response.
+	//nolint:bodyclose // tests
+	resp, body = ta.DoInertiaGet(handler, map[string]string{
+		goinertia.HeaderReset: "items",
+	})
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page = inertiat.DecodePage(t, body)
+	assert.NotContains(t, page.MergeProps, "items")
 }
 
 func newTestStore() *session.Store {

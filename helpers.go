@@ -17,14 +17,23 @@ func Redirect(c fiber.Ctx, url string) error {
 	}
 
 	if c.Get(HeaderInertia) != "" {
-		// For Inertia requests, use 409 Conflict with X-Inertia-Location header
-		c.Set(HeaderLocation, url)
-		c.Set(fiber.HeaderLocation, url)
-		return c.SendStatus(fiber.StatusConflict)
+		// For Inertia requests, use standard redirect (internal visit).
+		return c.Redirect().Status(fiber.StatusFound).To(url)
 	}
 
 	// For regular requests, use standard redirect
 	return c.Redirect().Status(fiber.StatusFound).To(url)
+}
+
+// RedirectExternal forces a full page reload for Inertia requests.
+func RedirectExternal(c fiber.Ctx, url string) error {
+	if url == "" || url == "/" {
+		url = c.BaseURL()
+	}
+
+	c.Set(HeaderLocation, url)
+	c.Set(fiber.HeaderLocation, url)
+	return c.SendStatus(fiber.StatusConflict)
 }
 
 // Note: This is intentionally marked as safe for JSON data in templates.
