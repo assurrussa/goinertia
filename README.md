@@ -10,8 +10,8 @@
 `goinertia` allows you to build modern single-page apps using [Vue.js](https://vuejs.org/), [React](https://reactjs.org/), or [Svelte](https://svelte.dev/) while keeping routing and controllers in your [Go (Fiber)](https://gofiber.io/) backend. It strictly adheres to the [Inertia.js protocol](https://inertiajs.com/the-protocol).
 
 Visit:
- - [inertiajs.com](https://inertiajs.com/) to learn more.
- - [fiber](https://gofiber.io/) to learn more.
+- [inertiajs.com](https://inertiajs.com/) to learn more.
+- [fiber](https://gofiber.io/) to learn more.
 
 ## Features
 
@@ -40,33 +40,33 @@ Here is a minimal example showing how to set up the Inertia middleware and rende
 package main
 
 import (
-    "github.com/gofiber/fiber/v3"
-    "github.com/assurrussa/goinertia"
+  "github.com/gofiber/fiber/v3"
+  "github.com/assurrussa/goinertia"
 )
 
 func main() {
-    // 1. Initialize Inertia
-    inertiaManager := goinertia.New("http://localhost:3000",
-        goinertia.WithAssetVersion("v1"),
-        goinertia.WithSharedProps(map[string]any{
-            "appName": "My App",
-        }),
-    )
+  // 1. Initialize Inertia
+  inertiaManager := goinertia.New("http://localhost:3000",
+    goinertia.WithAssetVersion("v1"),
+    goinertia.WithSharedProps(map[string]any{
+      "appName": "My App",
+    }),
+  )
 
-    // 2. Register Middleware
+  // 2. Register Middleware
   app := fiber.New(fiber.Config{ErrorHandler: inertiaManager.MiddlewareErrorListener()})
-    // Handles Inertia requests, asset versioning, and validation redirects
-    app.Use(inertiaManager.Middleware())
+  // Handles Inertia requests, asset versioning, and validation redirects
+  app.Use(inertiaManager.Middleware())
 
-    // 3. Define Routes
-    app.Get("/", func(c fiber.Ctx) error {
-        // Render a Vue/React component named "Home"
-        return inertiaManager.Render(c, "Home", map[string]any{
-            "user": "John Doe",
-        })
+  // 3. Define Routes
+  app.Get("/", func(c fiber.Ctx) error {
+    // Render a Vue/React component named "Home"
+    return inertiaManager.Render(c, "Home", map[string]any{
+      "user": "John Doe",
     })
+  })
 
-    app.Listen(":3000")
+  app.Listen(":3000")
 }
 ```
 
@@ -77,7 +77,7 @@ Use the `Render` method to return an Inertia response. If it's an XHR request, i
 
 ```go
 inertiaManager.Render(ctx, "Dashboard/Index", map[string]any{
-    "stats": statsData,
+"stats": statsData,
 })
 ```
 
@@ -89,9 +89,9 @@ inertiaManager.Render(ctx, "Dashboard/Index", map[string]any{
 ```go
 // In your controller
 if err := validate(form); err != nil {
-    inertiaManager.WithFlashError(ctx, "Something went wrong.")
-    inertiaManager.WithError(ctx, "email", "Email is already taken.")
-    return inertiaManager.RedirectBack(ctx)
+inertiaManager.WithFlashError(ctx, "Something went wrong.")
+inertiaManager.WithError(ctx, "email", "Email is already taken.")
+return inertiaManager.RedirectBack(ctx)
 }
 
 inertiaManager.WithFlashSuccess(ctx, "Profile updated!")
@@ -103,7 +103,7 @@ Optimize performance by wrapping expensive data in `WithLazyProp`. These are onl
 
 ```go
 inertiaManager.WithLazyProp(ctx, "heavyData", func(c context.Context) (any, error) {
-    return heavyDatabaseQuery(), nil
+return heavyDatabaseQuery(), nil
 })
 ```
 
@@ -112,10 +112,10 @@ Enable SSR to improve SEO and initial load performance. `goinertia` communicates
 
 ```go
 inertiaManager := goinertia.New(url,
-    goinertia.WithSSRConfig(goinertia.SSRConfig{
-        URL:     "http://127.0.0.1:13714",
-        Timeout: 3 * time.Second,
-    }),
+goinertia.WithSSRConfig(goinertia.SSRConfig{
+URL:     "http://127.0.0.1:13714",
+Timeout: 3 * time.Second,
+}),
 )
 ```
 
