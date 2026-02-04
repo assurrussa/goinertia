@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"time"
 
@@ -22,6 +23,12 @@ type MenuItem struct {
 	Href  string `json:"href"`
 }
 
+type User struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role"`
+}
+
 type BaseController struct {
 	inertia *goinertia.Inertia
 }
@@ -33,18 +40,55 @@ func NewBaseController(inertia *goinertia.Inertia) *BaseController {
 func (c *BaseController) Home(ctx fiber.Ctx) error {
 	return c.inertia.Render(ctx, "Home", map[string]any{
 		"title": "Home",
+		"plan":  goinertia.Once("Pro", goinertia.WithOnceKey("plan_v1")),
+		"heavy": goinertia.Defer(goinertia.LazyProp{
+			Key: "heavy",
+			Fn: func(_ context.Context) (any, error) {
+				return []int64{123, 234, 345, 456, 789}, nil
+			},
+		}),
 	})
 }
 
 func (c *BaseController) Users(ctx fiber.Ctx) error {
+	sortBy := fiber.Query[string](ctx, "sort", "name")
+	page := fiber.Query[int](ctx, "page", 1)
+	const pageSize = 3
+
+	users := sortUsers(allUsers(), sortBy)
+	pageUsers, totalPages, prevPage, nextPage, page := paginateUsers(users, page, pageSize)
+	c.inertia.WithMatchPropsOn(ctx, "sort")
+
 	return c.inertia.Render(ctx, "Users", map[string]any{
-		"title": "Users",
+		"title":      "Users",
+		"sort":       sortBy,
+		"page":       page,
+		"pageSize":   pageSize,
+		"total":      len(users),
+		"totalPages": totalPages,
+		"prevPage":   prevPage,
+		"nextPage":   nextPage,
+		"users": goinertia.Scroll(pageUsers, goinertia.ScrollPropConfig{
+			PageName:     "page",
+			PreviousPage: prevPage,
+			NextPage:     nextPage,
+			CurrentPage:  page,
+		}),
 	})
 }
 
 func (c *BaseController) Settings(ctx fiber.Ctx) error {
 	return c.inertia.Render(ctx, "Settings", map[string]any{
 		"title": "Settings",
+		"diagnostics": goinertia.Optional(goinertia.LazyProp{
+			Key: "diagnostics",
+			Fn: func(_ context.Context) (any, error) {
+				return map[string]any{
+					"server_time": time.Now().UTC().Format(time.RFC3339),
+					"version":     runtime.Version(),
+				}, nil
+			},
+		}),
 	})
 }
 
@@ -145,4 +189,68 @@ func examplePath(path string) string {
 	}
 
 	return filepath.Join(filepath.Dir(filename), path)
+}
+
+func allUsers() []User {
+	return []User{
+		{ID: 1, Name: "Alice", Role: "Admin"},
+		{ID: 2, Name: "Bob", Role: "Editor"},
+		{ID: 3, Name: "Carla", Role: "Viewer"},
+		{ID: 4, Name: "Dmitry", Role: "Admin"},
+		{ID: 5, Name: "Elena", Role: "Editor"},
+		{ID: 6, Name: "Farid", Role: "Viewer"},
+		{ID: 7, Name: "Gita", Role: "Editor"},
+		{ID: 8, Name: "Hector", Role: "Viewer"},
+		{ID: 9, Name: "Ira", Role: "Admin"},
+	}
+}
+
+func sortUsers(users []User, sortBy string) []User {
+	result := make([]User, len(users))
+	copy(result, users)
+
+	switch sortBy {
+	case "name_desc":
+		sort.Slice(result, func(i, j int) bool { return result[i].Name > result[j].Name })
+	case "id_desc":
+		sort.Slice(result, func(i, j int) bool { return result[i].ID > result[j].ID })
+	case "role":
+		sort.Slice(result, func(i, j int) bool { return result[i].Role < result[j].Role })
+	default:
+		sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	}
+
+	return result
+}
+
+func paginateUsers(users []User, page int, pageSize int) (data []User, totalPages int, prevPage int, nextPage int, curPage int) {
+	if page < 1 {
+		page = 1
+	}
+
+	totalPages = (len(users) + pageSize - 1) / pageSize
+	if totalPages == 0 {
+		totalPages = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > len(users) {
+		start = len(users)
+	}
+	if end > len(users) {
+		end = len(users)
+	}
+
+	if page > 1 {
+		prevPage = page - 1
+	}
+	if page < totalPages {
+		nextPage = page + 1
+	}
+
+	return users[start:end], totalPages, prevPage, nextPage, page
 }

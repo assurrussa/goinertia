@@ -1433,7 +1433,7 @@ func TestInertia_DeferredProps(t *testing.T) {
 				Key: "lazy",
 				Fn: func(_ context.Context) (any, error) {
 					atomic.AddInt32(&calls, 1)
-					return "value", nil
+					return "value_lazy", nil
 				},
 			}),
 		})
@@ -1459,7 +1459,7 @@ func TestInertia_DeferredProps(t *testing.T) {
 	})
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
 	page = inertiat.DecodePage(t, body)
-	assert.Equal(t, "value", page.Props["lazy"])
+	assert.Equal(t, "value_lazy", page.Props["lazy"])
 	assert.Equal(t, int32(1), atomic.LoadInt32(&calls))
 }
 
@@ -1492,6 +1492,133 @@ func TestInertia_OnceProps(t *testing.T) {
 	assert.False(t, ok)
 	_, ok = page.OnceProps["plans_v1"]
 	assert.True(t, ok)
+}
+
+func TestInertia_OptionalProp(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+	var calls int32
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"required": "yes",
+			"opt": goinertia.Optional(goinertia.LazyProp{
+				Key: "opt",
+				Fn: func(_ context.Context) (any, error) {
+					atomic.AddInt32(&calls, 1)
+					return "value_opt", nil
+				},
+			}),
+		})
+	}
+
+	// Full response should omit optional prop.
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(handler, nil)
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	_, ok := page.Props["opt"]
+	assert.False(t, ok)
+	assert.Equal(t, int32(0), atomic.LoadInt32(&calls))
+
+	// Partial without opt should still omit it.
+	//nolint:bodyclose // tests
+	resp, body = ta.DoInertiaGet(handler, map[string]string{
+		goinertia.HeaderPartialComponent: "Home",
+		goinertia.HeaderPartialOnly:      "required",
+	})
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page = inertiat.DecodePage(t, body)
+	_, ok = page.Props["opt"]
+	assert.False(t, ok)
+	assert.Equal(t, int32(0), atomic.LoadInt32(&calls))
+
+	// Explicit partial should include optional prop.
+	//nolint:bodyclose // tests
+	resp, body = ta.DoInertiaGet(handler, map[string]string{
+		goinertia.HeaderPartialComponent: "Home",
+		goinertia.HeaderPartialOnly:      "opt",
+	})
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page = inertiat.DecodePage(t, body)
+	assert.Equal(t, "value_opt", page.Props["opt"])
+	assert.Equal(t, int32(1), atomic.LoadInt32(&calls))
+}
+
+func TestInertia_AlwaysProp_PartialOnly(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+	var calls int32
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"foo": "bar",
+			"always": goinertia.Always(goinertia.LazyProp{
+				Key: "always",
+				Fn: func(_ context.Context) (any, error) {
+					atomic.AddInt32(&calls, 1)
+					return "value", nil
+				},
+			}),
+		})
+	}
+
+	// Partial-only should still include always prop.
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(handler, map[string]string{
+		goinertia.HeaderPartialComponent: "Home",
+		goinertia.HeaderPartialOnly:      "foo",
+	})
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	assert.Equal(t, "bar", page.Props["foo"])
+	assert.Equal(t, "value", page.Props["always"])
+	assert.Equal(t, int32(1), atomic.LoadInt32(&calls))
+}
+
+func TestInertia_DeferredOnceProps_PartialFetch(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+	var calls int32
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"plan": goinertia.Once("basic", goinertia.WithOnceKey("plan_v1")),
+			"heavy": goinertia.Defer(goinertia.LazyProp{
+				Key: "heavy",
+				Fn: func(_ context.Context) (any, error) {
+					atomic.AddInt32(&calls, 1)
+					return "value", nil
+				},
+			}),
+		})
+	}
+
+	// Full response: once prop included, deferred prop omitted but declared.
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(handler, nil)
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	assert.Equal(t, "basic", page.Props["plan"])
+	_, ok := page.Props["heavy"]
+	assert.False(t, ok)
+	assert.Contains(t, page.DeferredProps["default"], "heavy")
+	_, ok = page.OnceProps["plan_v1"]
+	assert.True(t, ok)
+
+	// Partial fetch for deferred prop should return value and not include deferredProps metadata.
+	//nolint:bodyclose // tests
+	resp, body = ta.DoInertiaGet(handler, map[string]string{
+		goinertia.HeaderPartialComponent: "Home",
+		goinertia.HeaderPartialOnly:      "heavy",
+		goinertia.HeaderExceptOnceProps:  "plan_v1",
+	})
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page = inertiat.DecodePage(t, body)
+	assert.Equal(t, "value", page.Props["heavy"])
+	_, ok = page.Props["plan"]
+	assert.False(t, ok)
+	_, ok = page.OnceProps["plan_v1"]
+	assert.True(t, ok)
+	assert.Empty(t, page.DeferredProps)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&calls))
 }
 
 func TestInertia_ErrorBag(t *testing.T) {
@@ -1537,6 +1664,127 @@ func TestInertia_ResetMergeProps(t *testing.T) {
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
 	page = inertiat.DecodePage(t, body)
 	assert.NotContains(t, page.MergeProps, "items")
+}
+
+func TestInertia_PrependAndDeepMergeProps(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"items":  goinertia.Prepend([]int{1, 2, 3}),
+			"config": goinertia.DeepMerge(map[string]any{"a": 1}),
+		})
+	}
+
+	// Full response should include proper merge metadata.
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(handler, nil)
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	assert.Contains(t, page.PrependProps, "items")
+	assert.Contains(t, page.DeepMergeProps, "config")
+	assert.NotContains(t, page.MergeProps, "items")
+	assert.NotContains(t, page.MergeProps, "config")
+
+	// Partial with reset should omit merge metadata but still include props.
+	//nolint:bodyclose // tests
+	resp, body = ta.DoInertiaGet(handler, map[string]string{
+		goinertia.HeaderPartialComponent: "Home",
+		goinertia.HeaderPartialOnly:      "items,config",
+		goinertia.HeaderReset:            "items,config",
+	})
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page = inertiat.DecodePage(t, body)
+	assert.Empty(t, page.PrependProps)
+	assert.Empty(t, page.DeepMergeProps)
+	_, ok := page.Props["items"]
+	assert.True(t, ok)
+	_, ok = page.Props["config"]
+	assert.True(t, ok)
+}
+
+func TestInertia_ScrollProp_MetadataAndMerge(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"items": goinertia.Scroll([]int{1, 2}, goinertia.ScrollPropConfig{
+				PageName:     "page",
+				PreviousPage: 1,
+				NextPage:     3,
+				CurrentPage:  2,
+			}),
+		})
+	}
+
+	// Full response should include scroll metadata and mergeProps.
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(handler, nil)
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	cfg, ok := page.ScrollProps["items"]
+	require.True(t, ok)
+	assert.Equal(t, "page", cfg.PageName)
+	assert.InDelta(t, float64(1), cfg.PreviousPage, 0.1)
+	assert.InDelta(t, float64(3), cfg.NextPage, 0.1)
+	assert.InDelta(t, float64(2), cfg.CurrentPage, 0.1)
+	assert.Contains(t, page.MergeProps, "items")
+}
+
+func TestInertia_ScrollProp_PrependIntent(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"items": goinertia.Scroll([]int{1, 2}, goinertia.ScrollPropConfig{
+				PageName:     "page",
+				PreviousPage: 1,
+				NextPage:     3,
+				CurrentPage:  2,
+			}),
+		})
+	}
+
+	// Prepend intent should set prependProps instead of mergeProps.
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(handler, map[string]string{
+		goinertia.HeaderPartialComponent:          "Home",
+		goinertia.HeaderPartialOnly:               "items",
+		goinertia.HeaderInfiniteScrollMergeIntent: "prepend",
+	})
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	assert.Contains(t, page.PrependProps, "items")
+	assert.NotContains(t, page.MergeProps, "items")
+	_, ok := page.ScrollProps["items"]
+	assert.True(t, ok)
+}
+
+func TestInertia_ResetMergeProps_Partial(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"items": goinertia.Merge([]int{1, 2, 3}),
+			"other": "skip",
+		})
+	}
+
+	// Partial request should return value but omit merge metadata when reset is set.
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(handler, map[string]string{
+		goinertia.HeaderPartialComponent: "Home",
+		goinertia.HeaderPartialOnly:      "items",
+		goinertia.HeaderReset:            "items",
+	})
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	assert.Empty(t, page.MergeProps)
+	_, ok := page.Props["other"]
+	assert.False(t, ok)
+	items, ok := page.Props["items"].([]any)
+	require.True(t, ok)
+	assert.Len(t, items, 3)
 }
 
 func newTestStore() *session.Store {

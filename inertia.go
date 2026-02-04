@@ -742,6 +742,11 @@ func (i *Inertia) handleWrappedProp(c fiber.Ctx, page *PageDTO, key string, valu
 }
 
 func (i *Inertia) handleDeferredProp(c fiber.Ctx, page *PageDTO, key string, prop DeferredProp, partial *partialConfig) bool {
+	if partial != nil && partial.explicitlyIncluded(key) {
+		i.setPropValue(c, page, key, prop.Value, partial)
+		return true
+	}
+
 	group := prop.Group
 	if group == "" {
 		group = "default"
@@ -750,10 +755,6 @@ func (i *Inertia) handleDeferredProp(c fiber.Ctx, page *PageDTO, key string, pro
 		page.DeferredProps = make(map[string][]string)
 	}
 	page.DeferredProps[group] = appendUnique(page.DeferredProps[group], key)
-	if partial == nil || !partial.explicitlyIncluded(key) {
-		return true
-	}
-	i.setPropValue(c, page, key, prop.Value, partial)
 	return true
 }
 
