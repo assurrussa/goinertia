@@ -92,6 +92,39 @@ func (c *BaseController) Settings(ctx fiber.Ctx) error {
 	})
 }
 
+// CreateUser demonstrates validation-only (Precognition) behavior.
+// When the client sends Precognition headers, the response will be 204/422 with errors only.
+func (c *BaseController) CreateUser(ctx fiber.Ctx) error {
+	name := ctx.FormValue("name")
+	email := ctx.FormValue("email")
+	isPrecognition := goinertia.IsPrecognition(ctx)
+
+	hasErrors := false
+	if name == "" {
+		hasErrors = true
+		c.inertia.WithError(ctx, "name", "Name is required")
+	}
+	if email == "" {
+		hasErrors = true
+		c.inertia.WithError(ctx, "email", "Email is required")
+	}
+
+	if isPrecognition {
+		return c.inertia.Render(ctx, "Settings", map[string]any{
+			"title": "Settings",
+		})
+	}
+
+	if !hasErrors {
+		c.inertia.WithFlashSuccess(ctx, "User created")
+		return c.inertia.RedirectBack(ctx)
+	}
+
+	return c.inertia.Render(ctx, "Settings", map[string]any{
+		"title": "Settings",
+	})
+}
+
 func (c *BaseController) Conflict(ctx fiber.Ctx) error {
 	// Flash message
 	c.inertia.WithFlashError(ctx, "You have been redirected because the page was not found (409 -> Redirect).")
@@ -122,6 +155,7 @@ func main() {
 		goinertia.WithFS(viewFS),
 		goinertia.WithRootTemplate("app.gohtml"),
 		goinertia.WithRootErrorTemplate("error.gohtml"),
+		// goinertia.WithPrecognitionVary(false),
 		goinertia.WithCanExposeDetails(func(_ context.Context, _ map[string][]string) bool {
 			// If you need to display errors as they are. true/false
 			return true
@@ -155,6 +189,7 @@ func main() {
 	app.Get("/", controller.Home)
 	app.Get("/users", controller.Users)
 	app.Get("/settings", controller.Settings)
+	app.Post("/users/create", controller.CreateUser)
 	app.Get("/not-found", controller.Conflict)
 
 	// Catch-all route for 404

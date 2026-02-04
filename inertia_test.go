@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/extractors"
 	"github.com/gofiber/fiber/v3/middleware/session"
@@ -1619,6 +1620,178 @@ func TestInertia_DeferredOnceProps_PartialFetch(t *testing.T) {
 	assert.True(t, ok)
 	assert.Empty(t, page.DeferredProps)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&calls))
+}
+
+func TestInertia_PrecognitionSuccess(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"foo": "bar",
+		})
+	}
+
+	//nolint:bodyclose // tests
+	resp, body := ta.DoGet(handler, map[string]string{
+		goinertia.HeaderPrecognition: "true",
+	})
+	assert.Equal(t, fiber.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, "true", resp.Header.Get(goinertia.HeaderPrecognition))
+	assert.Equal(t, "true", resp.Header.Get(goinertia.HeaderPrecognitionSuccess))
+	assert.Contains(t, resp.Header.Get("Vary"), goinertia.HeaderPrecognition)
+	assert.Empty(t, body)
+}
+
+func TestInertia_PrecognitionErrors(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	handler := func(c fiber.Ctx) error {
+		ta.Inrt.WithErrors(c, map[string]string{
+			"email": "Invalid",
+		})
+		return ta.Inrt.Render(c, "Home", map[string]any{})
+	}
+
+	//nolint:bodyclose // tests
+	resp, body := ta.DoGet(handler, map[string]string{
+		goinertia.HeaderPrecognition: "true",
+	})
+	assert.Equal(t, fiber.StatusUnprocessableEntity, resp.StatusCode)
+	assert.Equal(t, "true", resp.Header.Get(goinertia.HeaderPrecognition))
+
+	var payload struct {
+		Errors map[string][]string `json:"errors"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(body), &payload))
+	assert.Equal(t, []string{"Invalid"}, payload.Errors["email"])
+}
+
+func TestInertia_PrecognitionValidateOnly(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	handler := func(c fiber.Ctx) error {
+		ta.Inrt.WithErrors(c, map[string]string{
+			"email": "Invalid",
+			"name":  "Required",
+		})
+		return ta.Inrt.Render(c, "Home", map[string]any{})
+	}
+
+	//nolint:bodyclose // tests
+	resp, body := ta.DoGet(handler, map[string]string{
+		goinertia.HeaderPrecognition:             "true",
+		goinertia.HeaderPrecognitionValidateOnly: "email",
+	})
+	assert.Equal(t, fiber.StatusUnprocessableEntity, resp.StatusCode)
+
+	var payload struct {
+		Errors map[string][]string `json:"errors"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(body), &payload))
+	assert.Equal(t, []string{"Invalid"}, payload.Errors["email"])
+	_, ok := payload.Errors["name"]
+	assert.False(t, ok)
+}
+
+func TestInertia_PrecognitionErrorHandler(t *testing.T) {
+	ta := inertiat.NewTestAppWithErrorHandler(t)
+	handler := func(_ fiber.Ctx) error {
+		return goinertia.NewValidationError(422, "Validation failed", goinertia.ValidationErrors{
+			"email": {"Invalid"},
+		})
+	}
+
+	//nolint:bodyclose // tests
+	resp, body := ta.DoGet(handler, map[string]string{
+		goinertia.HeaderPrecognition: "true",
+	})
+	assert.Equal(t, fiber.StatusUnprocessableEntity, resp.StatusCode)
+
+	var payload struct {
+		Errors map[string][]string `json:"errors"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(body), &payload))
+	assert.Equal(t, []string{"Invalid"}, payload.Errors["email"])
+}
+
+func TestInertia_PrecognitionBypassesVersionConflict(t *testing.T) {
+	ta := inertiat.NewTestApp(t)
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"foo": "bar",
+		})
+	}
+
+	//nolint:bodyclose // tests
+	resp, body := ta.DoGet(handler, map[string]string{
+		goinertia.HeaderInertia:      "true",
+		goinertia.HeaderVersion:      "bad",
+		goinertia.HeaderPrecognition: "true",
+	})
+	assert.Equal(t, fiber.StatusNoContent, resp.StatusCode)
+	assert.Empty(t, body)
+}
+
+func TestInertia_PrecognitionVaryDefault(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"foo": "bar",
+		})
+	}
+
+	//nolint:bodyclose // tests
+	resp, _ := ta.DoInertiaGet(handler, nil)
+	assert.Contains(t, resp.Header.Get("Vary"), goinertia.HeaderPrecognition)
+}
+
+func TestInertia_PrecognitionVaryDisabled(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t, goinertia.WithPrecognitionVary(false))
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"foo": "bar",
+		})
+	}
+
+	//nolint:bodyclose // tests
+	resp, _ := ta.DoInertiaGet(handler, nil)
+	assert.NotContains(t, resp.Header.Get("Vary"), goinertia.HeaderPrecognition)
+}
+
+func TestInertia_HistoryHelpers(t *testing.T) {
+	ta := inertiat.NewTestAppWithoutMiddleware(t)
+
+	handler := func(c fiber.Ctx) error {
+		ta.Inrt.WithEncryptHistory(c)
+		ta.Inrt.WithClearHistory(c)
+		return ta.Inrt.Render(c, "Home", map[string]any{})
+	}
+
+	//nolint:bodyclose // tests
+	resp, body := ta.DoInertiaGet(handler, nil)
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	assert.True(t, page.EncryptHistory)
+	assert.True(t, page.ClearHistory)
+}
+
+func TestInertia_CacheControlNoCache(t *testing.T) {
+	ta := inertiat.NewTestApp(t)
+
+	handler := func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{
+			"foo": "bar",
+		})
+	}
+
+	//nolint:bodyclose // tests
+	resp, _ := ta.DoInertiaGet(handler, map[string]string{
+		fiber.HeaderCacheControl: "no-cache",
+	})
+	assert.Equal(t, "no-cache", resp.Header.Get(fiber.HeaderCacheControl))
 }
 
 func TestInertia_ErrorBag(t *testing.T) {

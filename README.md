@@ -157,15 +157,10 @@ Supported:
   `matchPropsOn`, `scrollProps`, `onceProps`, plus `encryptHistory/clearHistory`.
 - Redirect semantics: internal redirects (302/303) and external redirects (409 + `X-Inertia-Location`).
 - `errors` always included (empty object by default).
-
-Not yet implemented:
-
-- Precognition headers/flow (`Precognition`, `Precognition-Validate-Only`, `Precognition-Success`,
+- Precognition flow (`Precognition`, `Precognition-Validate-Only`, `Precognition-Success`,
   `Vary: Precognition`).
-- Explicit API helpers for `encryptHistory` / `clearHistory` (fields are present in the page object).
-- `Cache-Control: no-cache` handling for reload requests (if you rely on proxy caches).
-
-If you need any of the missing items, open an issue or PR.
+- History helpers: `WithEncryptHistory` / `WithClearHistory`.
+- `Cache-Control: no-cache` echo for reload requests.
 
 ## Documentation
 
@@ -175,6 +170,8 @@ Comprehensive documentation is available in the `docs/` directory:
 - [Configuration Options](docs/options.md)
 - [Flash Messages](docs/flash.md)
 - [Validation & Redirects](docs/validation.md)
+- [Precognition](docs/precognition.md)
+- [History Flags](docs/history.md)
 - [Handling 409 Conflicts](docs/redirect-409.md)
 - [Lazy Properties](docs/lazy-props.md)
 - [SSR Configuration](docs/ssr.md)

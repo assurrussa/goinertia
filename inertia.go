@@ -19,8 +19,10 @@ import (
 )
 
 type pageMeta struct {
-	matchPropsOn []string
-	scrollProps  map[string]ScrollPropConfig
+	matchPropsOn   []string
+	scrollProps    map[string]ScrollPropConfig
+	encryptHistory *bool
+	clearHistory   *bool
 }
 
 type partialConfig struct {
@@ -66,6 +68,7 @@ type Inertia struct {
 	csrfTokenProvider         CSRFTokenProvider
 	csrfPropName              string
 	isDev                     bool
+	precognitionVary          bool
 }
 
 func Must(inr *Inertia, err error) *Inertia {
@@ -124,6 +127,7 @@ func New(baseURL string, opts ...Option) *Inertia {
 		customErrorGettingHandler: DefaultCustomGettingError,
 		customErrorDetailsHandler: DefaultCustomErrorDetails,
 		csrfPropName:              ContextPropsCSRFToken,
+		precognitionVary:          true,
 	}
 
 	for _, o := range opts {
@@ -287,6 +291,20 @@ func (i *Inertia) WithMatchPropsOn(c fiber.Ctx, props ...string) {
 	}
 }
 
+// WithEncryptHistory sets encryptHistory metadata for the response.
+func (i *Inertia) WithEncryptHistory(c fiber.Ctx) {
+	meta := i.getContextKeyPageMeta(c)
+	value := true
+	meta.encryptHistory = &value
+}
+
+// WithClearHistory sets clearHistory metadata for the response.
+func (i *Inertia) WithClearHistory(c fiber.Ctx) {
+	meta := i.getContextKeyPageMeta(c)
+	value := true
+	meta.clearHistory = &value
+}
+
 // RedirectBackWithValidationErrors redirects back with multiple validation errors per field.
 func (i *Inertia) RedirectBackWithValidationErrors(c fiber.Ctx, errors ValidationErrors) error {
 	i.WithValidationErrors(c, errors)
@@ -336,7 +354,101 @@ func (i *Inertia) RedirectExternal(c fiber.Ctx, url string) error {
 	return c.SendStatus(fiber.StatusConflict)
 }
 
+func (i *Inertia) isPrecognitionRequest(c fiber.Ctx) bool {
+	return IsPrecognition(c)
+}
+
+func (i *Inertia) shouldNoCacheResponse(c fiber.Ctx) bool {
+	cacheControl := strings.ToLower(strings.TrimSpace(c.Get(fiber.HeaderCacheControl)))
+	return cacheControl != "" && strings.Contains(cacheControl, "no-cache")
+}
+
+func filterValidationErrors(errors ValidationErrors, only map[string]struct{}) ValidationErrors {
+	if errors == nil || len(only) == 0 {
+		return errors
+	}
+	filtered := make(ValidationErrors, len(errors))
+	for field, msgs := range errors {
+		if _, ok := only[field]; ok {
+			filtered[field] = msgs
+		}
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return filtered
+}
+
+func (i *Inertia) collectPrecognitionErrors(c fiber.Ctx) ValidationErrors {
+	props := i.getContextKeyProps(c)
+	return normalizeValidationErrors(props[ContextPropsErrors])
+}
+
+func (i *Inertia) renderPrecognition(c fiber.Ctx, errors ValidationErrors) error {
+	addVaryHeader(c, HeaderPrecognition)
+	c.Set(HeaderPrecognition, "true")
+	if i.shouldNoCacheResponse(c) {
+		c.Set(fiber.HeaderCacheControl, "no-cache")
+	}
+
+	if len(errors) == 0 {
+		c.Set(HeaderPrecognitionSuccess, "true")
+		return c.SendStatus(fiber.StatusNoContent)
+	}
+
+	payload := map[string]any{"errors": errors}
+	js, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("error marshaling precognition errors: %w", err)
+	}
+
+	c.Status(fiber.StatusUnprocessableEntity)
+	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	return c.Send(js)
+}
+
+func (i *Inertia) renderPrecognitionError(c fiber.Ctx, errReturn *Error) error {
+	errors := errReturn.ValidationErrors()
+	errors = filterValidationErrors(errors, parseHeaderList(c.Get(HeaderPrecognitionValidateOnly)))
+	if len(errors) > 0 {
+		return i.renderPrecognition(c, errors)
+	}
+
+	addVaryHeader(c, HeaderPrecognition)
+	c.Set(HeaderPrecognition, "true")
+	if i.shouldNoCacheResponse(c) {
+		c.Set(fiber.HeaderCacheControl, "no-cache")
+	}
+
+	status := fiber.StatusInternalServerError
+	message := ErrInternal.Message
+	if errReturn != nil {
+		if errReturn.Code != 0 {
+			status = errReturn.Code
+		}
+		if errReturn.Message != "" {
+			message = errReturn.Message
+		}
+	}
+
+	payload := map[string]any{"message": message}
+	js, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("error marshaling precognition error: %w", err)
+	}
+
+	c.Status(status)
+	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	return c.Send(js)
+}
+
 func (i *Inertia) Render(c fiber.Ctx, component string, props map[string]any) error {
+	if i.isPrecognitionRequest(c) {
+		errors := i.collectPrecognitionErrors(c)
+		errors = filterValidationErrors(errors, parseHeaderList(c.Get(HeaderPrecognitionValidateOnly)))
+		return i.renderPrecognition(c, errors)
+	}
+
 	page, err := i.buildPage(c, component, props)
 	if err != nil {
 		return fmt.Errorf("could not build page: %w", err)
@@ -823,7 +935,10 @@ func (i *Inertia) renderJSON(c fiber.Ctx, page *PageDTO) error {
 		return fmt.Errorf("error marshaling page: %w", err)
 	}
 
-	c.Set("Vary", HeaderInertia)
+	addVaryHeader(c, HeaderInertia)
+	if i.precognitionVary {
+		addVaryHeader(c, HeaderPrecognition)
+	}
 	c.Set(HeaderInertia, "true")
 	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 
@@ -1076,6 +1191,13 @@ func (i *Inertia) applyPageMeta(c fiber.Ctx, page *PageDTO) {
 			}
 		}
 	}
+
+	if pm.encryptHistory != nil {
+		page.EncryptHistory = *pm.encryptHistory
+	}
+	if pm.clearHistory != nil {
+		page.ClearHistory = *pm.clearHistory
+	}
 }
 
 func (i *Inertia) ensureErrorsProp(_ fiber.Ctx, page *PageDTO) {
@@ -1096,45 +1218,12 @@ func (i *Inertia) applyErrorBag(c fiber.Ctx, page *PageDTO) {
 		return
 	}
 
-	errorsVal, ok := page.Props[ContextPropsErrors]
-	if !ok || errorsVal == nil {
+	flat := flattenValidationErrors(page.Props[ContextPropsErrors])
+	if flat == nil {
 		page.Props[ContextPropsErrors] = map[string]map[string]string{bag: {}}
 		return
 	}
-
-	switch v := errorsVal.(type) {
-	case map[string]string:
-		page.Props[ContextPropsErrors] = map[string]map[string]string{bag: v}
-	case ValidationErrors:
-		flat := make(map[string]string, len(v))
-		for field, errs := range v {
-			if len(errs) > 0 {
-				flat[field] = errs[0]
-			}
-		}
-		page.Props[ContextPropsErrors] = map[string]map[string]string{bag: flat}
-	case map[string]any:
-		if _, exists := v[bag]; !exists {
-			v[bag] = map[string]string{}
-		}
-		page.Props[ContextPropsErrors] = v
-	case map[string]map[string]string:
-		if _, exists := v[bag]; !exists {
-			v[bag] = map[string]string{}
-		}
-		page.Props[ContextPropsErrors] = v
-	default:
-		page.Props[ContextPropsErrors] = map[string]map[string]string{bag: {}}
-	}
-}
-
-func appendUnique(list []string, value string) []string {
-	for _, item := range list {
-		if item == value {
-			return list
-		}
-	}
-	return append(list, value)
+	page.Props[ContextPropsErrors] = map[string]map[string]string{bag: flat}
 }
 
 func (i *Inertia) isExternalRedirect(target string) bool {
