@@ -34,6 +34,12 @@ const (
 	HeaderExceptOnceProps = "X-Inertia-Except-Once-Props"
 	// HeaderInfiniteScrollMergeIntent header.
 	HeaderInfiniteScrollMergeIntent = "X-Inertia-Infinite-Scroll-Merge-Intent"
+	// HeaderPrecognition header.
+	HeaderPrecognition = "Precognition"
+	// HeaderPrecognitionValidateOnly header.
+	HeaderPrecognitionValidateOnly = "Precognition-Validate-Only"
+	// HeaderPrecognitionSuccess header.
+	HeaderPrecognitionSuccess = "Precognition-Success"
 )
 
 // Keys.

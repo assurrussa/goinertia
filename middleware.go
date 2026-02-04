@@ -24,7 +24,7 @@ func (i *Inertia) Middleware() fiber.Handler {
 		}
 
 		// Check asset version for GET requests only
-		if method == http.MethodGet && c.Get(HeaderVersion) != i.assetVersion {
+		if method == http.MethodGet && c.Get(HeaderVersion) != i.assetVersion && !i.isPrecognitionRequest(c) {
 			c.Set(HeaderLocation, i.baseURL+c.OriginalURL())
 			return c.SendStatus(fiber.StatusConflict)
 		}
@@ -40,6 +40,9 @@ func (i *Inertia) MiddlewareErrorListener() fiber.ErrorHandler {
 	return func(c fiber.Ctx, err error) error {
 		isAllowedErrorDetailsMessage := i.canExposeDetails(c, c.GetHeaders())
 		errReturn := getError(isAllowedErrorDetailsMessage, err, i.customErrorGettingHandler)
+		if i.isPrecognitionRequest(c) {
+			return i.renderPrecognitionError(c, errReturn)
+		}
 		details := i.customErrorDetailsHandler(errReturn, isAllowedErrorDetailsMessage)
 
 		if c.Get(HeaderInertia) == "" && c.Method() == fiber.MethodGet {
@@ -64,7 +67,13 @@ func (i *Inertia) redirectCheck(c fiber.Ctx, err error) error {
 		return err
 	}
 
-	c.Set("Vary", HeaderInertia)
+	addVaryHeader(c, HeaderInertia)
+	if i.precognitionVary {
+		addVaryHeader(c, HeaderPrecognition)
+	}
+	if i.shouldNoCacheResponse(c) {
+		c.Set(fiber.HeaderCacheControl, "no-cache")
+	}
 
 	method := c.Method()
 	statusCode := c.Response().StatusCode()

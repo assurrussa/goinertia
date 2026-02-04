@@ -187,3 +187,11 @@ func WithDevMode() Option {
 		i.isDev = true
 	}
 }
+
+// WithPrecognitionVary controls whether "Vary: Precognition" is added to Inertia responses.
+// Defaults to true to match the protocol recommendation.
+func WithPrecognitionVary(enabled bool) Option {
+	return func(i *Inertia) {
+		i.precognitionVary = enabled
+	}
+}

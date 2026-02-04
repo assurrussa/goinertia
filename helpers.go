@@ -75,3 +75,111 @@ func sleeper(c context.Context, sleep time.Duration) error {
 	}
 	return nil
 }
+
+func appendUnique(list []string, value string) []string {
+	for _, item := range list {
+		if item == value {
+			return list
+		}
+	}
+	return append(list, value)
+}
+
+func addVaryHeader(c fiber.Ctx, value string) {
+	if value == "" {
+		return
+	}
+	current := string(c.Response().Header.Peek("Vary"))
+	if current == "" {
+		c.Set("Vary", value)
+		return
+	}
+	for _, item := range strings.Split(current, ",") {
+		if strings.TrimSpace(item) == value {
+			return
+		}
+	}
+	c.Set("Vary", current+", "+value)
+}
+
+func IsPrecognition(c fiber.Ctx) bool {
+	return strings.TrimSpace(c.Get(HeaderPrecognition)) != ""
+}
+
+func normalizeValidationErrors(value any) ValidationErrors {
+	if value == nil {
+		return nil
+	}
+	switch v := value.(type) {
+	case ValidationErrors:
+		res := make(ValidationErrors, len(v))
+		for field, msgs := range v {
+			res[field] = append([]string{}, msgs...)
+		}
+		return res
+	case map[string][]string:
+		res := make(ValidationErrors, len(v))
+		for field, msgs := range v {
+			res[field] = append([]string{}, msgs...)
+		}
+		return res
+	case map[string]string:
+		res := make(ValidationErrors, len(v))
+		for field, msg := range v {
+			res[field] = []string{msg}
+		}
+		return res
+	case map[string]map[string]string:
+		res := make(ValidationErrors)
+		for _, bag := range v {
+			for field, msg := range bag {
+				res[field] = []string{msg}
+			}
+		}
+		if len(res) == 0 {
+			return nil
+		}
+		return res
+	case map[string]any:
+		res := make(ValidationErrors)
+		for field, val := range v {
+			switch vv := val.(type) {
+			case string:
+				res[field] = []string{vv}
+			case []string:
+				res[field] = append([]string{}, vv...)
+			case map[string]string:
+				for nestedField, msg := range vv {
+					res[nestedField] = []string{msg}
+				}
+			case map[string][]string:
+				for nestedField, msgs := range vv {
+					res[nestedField] = append([]string{}, msgs...)
+				}
+			}
+		}
+		if len(res) == 0 {
+			return nil
+		}
+		return res
+	default:
+		return nil
+	}
+}
+
+func flattenValidationErrors(value any) map[string]string {
+	errors := normalizeValidationErrors(value)
+	if len(errors) == 0 {
+		return nil
+	}
+	flat := make(map[string]string, len(errors))
+	for field, msgs := range errors {
+		if len(msgs) > 0 {
+			flat[field] = msgs[0]
+		}
+	}
+	if len(flat) == 0 {
+		return nil
+	}
+	return flat
+}

@@ -1,5 +1,5 @@
-import { mergeProps, unref, withCtx, createTextVNode, useSSRContext, createVNode, openBlock, createBlock, Fragment, renderList, toDisplayString, createSSRApp, h } from "vue";
-import { ssrRenderAttrs, ssrInterpolate, ssrRenderComponent, ssrRenderList } from "vue/server-renderer";
+import { mergeProps, unref, withCtx, createTextVNode, useSSRContext, createVNode, openBlock, createBlock, Fragment, renderList, toDisplayString, reactive, ref, createSSRApp, h } from "vue";
+import { ssrRenderAttrs, ssrInterpolate, ssrRenderComponent, ssrRenderList, ssrRenderAttr } from "vue/server-renderer";
 import { Link, Deferred, createInertiaApp } from "@inertiajs/vue3";
 import createServer from "@inertiajs/vue3/server";
 import { renderToString } from "@vue/server-renderer";
@@ -113,10 +113,16 @@ const _sfc_main$1 = {
     diagnostics: Object
   },
   setup(__props) {
+    const form = reactive({
+      name: "",
+      email: ""
+    });
+    const errors = ref({});
+    const status = ref("");
     return (_ctx, _push, _parent, _attrs) => {
-      _push(`<div${ssrRenderAttrs(_attrs)} data-v-3d41b7ac><h1 data-v-3d41b7ac>${ssrInterpolate(__props.title)}</h1><p data-v-3d41b7ac>Settings page content.</p><div class="panel" data-v-3d41b7ac><h2 data-v-3d41b7ac>Optional prop</h2><p class="muted" data-v-3d41b7ac>Diagnostics are loaded only when requested.</p>`);
+      _push(`<div${ssrRenderAttrs(_attrs)} data-v-acb3112a><h1 data-v-acb3112a>${ssrInterpolate(__props.title)}</h1><p data-v-acb3112a>Settings page content.</p><div class="panel" data-v-acb3112a><h2 data-v-acb3112a>Optional prop</h2><p class="muted" data-v-acb3112a>Diagnostics are loaded only when requested.</p>`);
       if (__props.diagnostics) {
-        _push(`<div class="diagnostics" data-v-3d41b7ac><pre data-v-3d41b7ac>${ssrInterpolate(__props.diagnostics)}</pre></div>`);
+        _push(`<div class="diagnostics" data-v-acb3112a><pre data-v-acb3112a>${ssrInterpolate(__props.diagnostics)}</pre></div>`);
       } else {
         _push(ssrRenderComponent(unref(Link), {
           href: "/settings",
@@ -136,7 +142,25 @@ const _sfc_main$1 = {
           _: 1
         }, _parent));
       }
-      _push(`</div></div>`);
+      _push(`</div><div class="panel" data-v-acb3112a><h2 data-v-acb3112a>Precognition form</h2><p class="muted" data-v-acb3112a>Validation-only request using Precognition headers.</p><form class="form-grid" data-v-acb3112a><label class="field" data-v-acb3112a> Name <input${ssrRenderAttr("value", form.name)} type="text" class="input" data-v-acb3112a>`);
+      if (errors.value.name) {
+        _push(`<span class="error" data-v-acb3112a>${ssrInterpolate(errors.value.name[0])}</span>`);
+      } else {
+        _push(`<!---->`);
+      }
+      _push(`</label><label class="field" data-v-acb3112a> Email <input${ssrRenderAttr("value", form.email)} type="email" class="input" data-v-acb3112a>`);
+      if (errors.value.email) {
+        _push(`<span class="error" data-v-acb3112a>${ssrInterpolate(errors.value.email[0])}</span>`);
+      } else {
+        _push(`<!---->`);
+      }
+      _push(`</label><div class="actions" data-v-acb3112a><button type="submit" class="btn" data-v-acb3112a>Validate only</button>`);
+      if (status.value) {
+        _push(`<span class="status" data-v-acb3112a>${ssrInterpolate(status.value)}</span>`);
+      } else {
+        _push(`<!---->`);
+      }
+      _push(`</div></form></div></div>`);
     };
   }
 };
@@ -146,7 +170,7 @@ _sfc_main$1.setup = (props, ctx) => {
   (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("src/Pages/Settings.vue");
   return _sfc_setup$1 ? _sfc_setup$1(props, ctx) : void 0;
 };
-const Settings = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-3d41b7ac"]]);
+const Settings = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-acb3112a"]]);
 const __vite_glob_0_2 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   default: Settings

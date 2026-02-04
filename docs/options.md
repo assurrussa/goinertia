@@ -13,6 +13,7 @@ instance.
 | `WithRootErrorTemplate(path string)` | Sets the path to the error page template. Default: `error.gohtml`.                                   |
 | `WithAssetVersion(version string)`   | Sets the asset version string to force client-side reloads when assets change.                       |
 | `WithDevMode()`                      | Enables development mode: disables template caching and checks for Vite `hot` file on every request. |
+| `WithPrecognitionVary(enabled bool)` | Controls whether `Vary: Precognition` is added to Inertia responses (default: true).                 |
 
 ## Data & Context
 
@@ -45,4 +46,3 @@ instance.
 | Option                            | Description                                                                    |
 |-----------------------------------|--------------------------------------------------------------------------------|
 | `WithSSRConfig(config SSRConfig)` | Enables and configures Server-Side Rendering. See [SSR Documentation](ssr.md). |
-
