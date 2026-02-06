@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"net/url"
 	"strings"
 	"time"
 
@@ -86,6 +87,7 @@ func appendUnique(list []string, value string) []string {
 }
 
 func addVaryHeader(c fiber.Ctx, value string) {
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return
 	}
@@ -95,7 +97,7 @@ func addVaryHeader(c fiber.Ctx, value string) {
 		return
 	}
 	for _, item := range strings.Split(current, ",") {
-		if strings.TrimSpace(item) == value {
+		if strings.EqualFold(strings.TrimSpace(item), value) {
 			return
 		}
 	}
@@ -106,65 +108,139 @@ func IsPrecognition(c fiber.Ctx) bool {
 	return strings.TrimSpace(c.Get(HeaderPrecognition)) != ""
 }
 
+func parseInertiaBaseURL(baseURL string) *url.URL {
+	base, err := url.Parse(baseURL)
+	if err != nil || base.Scheme == "" || base.Host == "" {
+		return nil
+	}
+
+	return base
+}
+
+func buildInertiaLocation(base *url.URL, originalURL string) string {
+	if base == nil {
+		return originalURL
+	}
+
+	if originalURL == "" {
+		return base.String()
+	}
+
+	ref, err := url.Parse(originalURL)
+	if err != nil {
+		return base.String()
+	}
+
+	// ResolveReference avoids malformed URLs (e.g. double slashes) and preserves query strings.
+	return base.ResolveReference(ref).String()
+}
+
 func normalizeValidationErrors(value any) ValidationErrors {
 	if value == nil {
 		return nil
 	}
+
 	switch v := value.(type) {
 	case ValidationErrors:
-		res := make(ValidationErrors, len(v))
-		for field, msgs := range v {
-			res[field] = append([]string{}, msgs...)
-		}
-		return res
+		return cloneValidationErrors(v)
 	case map[string][]string:
-		res := make(ValidationErrors, len(v))
-		for field, msgs := range v {
-			res[field] = append([]string{}, msgs...)
-		}
-		return res
+		return cloneValidationErrorsFromMapStringSlice(v)
 	case map[string]string:
-		res := make(ValidationErrors, len(v))
-		for field, msg := range v {
-			res[field] = []string{msg}
-		}
-		return res
+		return validationErrorsFromMapStringString(v)
 	case map[string]map[string]string:
-		res := make(ValidationErrors)
-		for _, bag := range v {
-			for field, msg := range bag {
-				res[field] = []string{msg}
-			}
-		}
-		if len(res) == 0 {
-			return nil
-		}
-		return res
+		return validationErrorsFromBags(v)
 	case map[string]any:
-		res := make(ValidationErrors)
-		for field, val := range v {
-			switch vv := val.(type) {
-			case string:
-				res[field] = []string{vv}
-			case []string:
-				res[field] = append([]string{}, vv...)
-			case map[string]string:
-				for nestedField, msg := range vv {
-					res[nestedField] = []string{msg}
-				}
-			case map[string][]string:
-				for nestedField, msgs := range vv {
-					res[nestedField] = append([]string{}, msgs...)
-				}
-			}
-		}
-		if len(res) == 0 {
-			return nil
-		}
-		return res
+		return validationErrorsFromMapAny(v)
 	default:
 		return nil
 	}
+}
+
+func cloneValidationErrors(errors ValidationErrors) ValidationErrors {
+	res := make(ValidationErrors, len(errors))
+	for field, msgs := range errors {
+		res[field] = append([]string{}, msgs...)
+	}
+	return res
+}
+
+func cloneValidationErrorsFromMapStringSlice(errors map[string][]string) ValidationErrors {
+	res := make(ValidationErrors, len(errors))
+	for field, msgs := range errors {
+		res[field] = append([]string{}, msgs...)
+	}
+	return res
+}
+
+func validationErrorsFromMapStringString(errors map[string]string) ValidationErrors {
+	res := make(ValidationErrors, len(errors))
+	for field, msg := range errors {
+		res[field] = []string{msg}
+	}
+	return res
+}
+
+func validationErrorsFromBags(bags map[string]map[string]string) ValidationErrors {
+	res := make(ValidationErrors)
+	for _, bag := range bags {
+		for field, msg := range bag {
+			res[field] = []string{msg}
+		}
+	}
+	if len(res) == 0 {
+		return nil
+	}
+	return res
+}
+
+func validationErrorsFromMapAny(value map[string]any) ValidationErrors {
+	res := make(ValidationErrors)
+	for field, val := range value {
+		mergeValidationErrors(res, field, val)
+	}
+	if len(res) == 0 {
+		return nil
+	}
+	return res
+}
+
+func mergeValidationErrors(dst ValidationErrors, field string, value any) {
+	switch v := value.(type) {
+	case string:
+		dst[field] = []string{v}
+	case []string:
+		dst[field] = append([]string{}, v...)
+	case []any:
+		if msgs := anySliceToStrings(v); len(msgs) > 0 {
+			dst[field] = msgs
+		}
+	case map[string]string:
+		for nestedField, nestedVal := range v {
+			mergeValidationErrors(dst, nestedField, nestedVal)
+		}
+	case map[string][]string:
+		for nestedField, nestedVal := range v {
+			mergeValidationErrors(dst, nestedField, nestedVal)
+		}
+	case map[string]any:
+		for nestedField, nestedVal := range v {
+			mergeValidationErrors(dst, nestedField, nestedVal)
+		}
+	case ValidationErrors:
+		for nestedField, nestedVal := range v {
+			mergeValidationErrors(dst, nestedField, nestedVal)
+		}
+	}
+}
+
+func anySliceToStrings(items []any) []string {
+	msgs := make([]string, 0, len(items))
+	for _, item := range items {
+		if s, ok := item.(string); ok {
+			msgs = append(msgs, s)
+		}
+	}
+	return msgs
 }
 
 func flattenValidationErrors(value any) map[string]string {

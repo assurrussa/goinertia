@@ -22,7 +22,9 @@ var (
 		case isCanDetails:
 			details = appErr.Error()
 			if errCause := appErr.Unwrap(); errCause != nil {
-				details += ": " + errCause.Error()
+				if addDetailErr := errCause.Error(); addDetailErr != details {
+					details += ": " + addDetailErr
+				}
 			}
 		default:
 			code := appErr.Code

@@ -120,6 +120,132 @@ func Test_AddVaryHeader(t *testing.T) {
 		addVaryHeader(ctx, "Precognition")
 		tassert.Equal(t, "X-Inertia, Precognition", string(ctx.Response().Header.Peek("Vary")))
 	})
+
+	t.Run("case-insensitive dedupe", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := fibert.Default()
+		ctx.Set("Vary", "x-inertia")
+		addVaryHeader(ctx, "X-Inertia")
+		tassert.Equal(t, "x-inertia", string(ctx.Response().Header.Peek("Vary")))
+	})
+}
+
+func Test_buildInertiaLocation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		baseURL     string
+		originalURL string
+		want        string
+	}{
+		{
+			name:        "absolute base, trailing slash, absolute path + query",
+			baseURL:     "http://localhost.loc:3000/",
+			originalURL: "/test?x=1",
+			want:        "http://localhost.loc:3000/test?x=1",
+		},
+		{
+			name:        "absolute base, no trailing slash, absolute path + query",
+			baseURL:     "http://localhost.loc:3000",
+			originalURL: "/test?x=1",
+			want:        "http://localhost.loc:3000/test?x=1",
+		},
+		{
+			name:        "absolute base, trailing slash, relative path + query",
+			baseURL:     "http://localhost.loc:3000/",
+			originalURL: "test?x=1",
+			want:        "http://localhost.loc:3000/test?x=1",
+		},
+		{
+			name:        "absolute base, base path preserved for relative reference",
+			baseURL:     "http://localhost.loc:3000/app/",
+			originalURL: "test?x=1",
+			want:        "http://localhost.loc:3000/app/test?x=1",
+		},
+		{
+			name:        "absolute base, empty original defaults to /",
+			baseURL:     "http://localhost.loc:3000/",
+			originalURL: "",
+			want:        "http://localhost.loc:3000/",
+		},
+		{
+			name:        "non-absolute base falls back to concat",
+			baseURL:     "localhost.loc:3000/",
+			originalURL: "/test?x=1",
+			want:        "/test?x=1",
+		},
+		{
+			name:        "empty original url",
+			baseURL:     "http://localhost.loc:3000",
+			originalURL: "",
+			want:        "http://localhost.loc:3000",
+		},
+		{
+			name:        "invalid original url falls back to concat",
+			baseURL:     "http://localhost.loc:3000/",
+			originalURL: "/test\n",
+			want:        "http://localhost.loc:3000/",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			base := parseInertiaBaseURL(tt.baseURL)
+			require.Equal(t, tt.want, buildInertiaLocation(base, tt.originalURL))
+		})
+	}
+}
+
+var buildInertiaLocationSink string
+
+const buildInertiaLocationBenchOriginalURL = "/test?x=1&y=2"
+
+func Benchmark_buildInertiaLocation_Absolute(b *testing.B) {
+	baseURL := "http://localhost.loc:3000/"
+	originalURL := buildInertiaLocationBenchOriginalURL
+	base := parseInertiaBaseURL(baseURL)
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		buildInertiaLocationSink = buildInertiaLocation(base, originalURL)
+	}
+}
+
+func Benchmark_buildInertiaLocation_RelativeRef(b *testing.B) {
+	baseURL := "http://localhost.loc:3000/app/"
+	originalURL := "test?x=1&y=2"
+	base := parseInertiaBaseURL(baseURL)
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		buildInertiaLocationSink = buildInertiaLocation(base, originalURL)
+	}
+}
+
+func Benchmark_buildInertiaLocation_NonAbsoluteFallback(b *testing.B) {
+	baseURL := "localhost.loc:3000/"
+	originalURL := buildInertiaLocationBenchOriginalURL
+	base := parseInertiaBaseURL(baseURL)
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		buildInertiaLocationSink = buildInertiaLocation(base, originalURL)
+	}
+}
+
+func Benchmark_buildInertiaLocation_NaiveConcat(b *testing.B) {
+	baseURL := "http://localhost.loc:3000/"
+	originalURL := buildInertiaLocationBenchOriginalURL
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		buildInertiaLocationSink = baseURL + originalURL
+	}
 }
 
 func Test_NormalizeValidationErrors(t *testing.T) {
@@ -197,6 +323,21 @@ func Test_NormalizeValidationErrors(t *testing.T) {
 		res := normalizeValidationErrors(orig)
 		require.NotNil(t, res)
 		tassert.Equal(t, []string{"Invalid"}, res["email"])
+		tassert.Equal(t, []string{"Required"}, res["name"])
+	})
+
+	t.Run("map string any (json-unmarshal style arrays)", func(t *testing.T) {
+		t.Parallel()
+
+		orig := map[string]any{
+			"email": []any{"Invalid", "Too short"},
+			"bag": map[string]any{
+				"name": []any{"Required"},
+			},
+		}
+		res := normalizeValidationErrors(orig)
+		require.NotNil(t, res)
+		tassert.Equal(t, []string{"Invalid", "Too short"}, res["email"])
 		tassert.Equal(t, []string{"Required"}, res["name"])
 	})
 }

@@ -12,6 +12,8 @@ var (
 	ErrInvalidContextViewData = errors.New("inertia: could not convert context view data to map")
 	// ErrBadSsrStatusCode error.
 	ErrBadSsrStatusCode = errors.New("inertia: bad processSSR status code >= 400")
+	// ErrBaseURLEmpty error.
+	ErrBaseURLEmpty = errors.New("base URL is empty")
 )
 
 type ValidationErrors map[string][]string
