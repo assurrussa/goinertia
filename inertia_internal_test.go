@@ -30,7 +30,11 @@ func TestInertia_CreateAndValidation(t *testing.T) {
 		}}),
 	}
 
-	inrt, err := NewWithValidation("http://localhost:3000")
+	inrt, err := NewWithValidation("")
+	require.ErrorIs(t, err, ErrBaseURLEmpty)
+	require.Nil(t, inrt)
+
+	inrt, err = NewWithValidation("http://localhost:3000")
 	require.Error(t, err)
 	require.Nil(t, inrt)
 

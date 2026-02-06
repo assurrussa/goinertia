@@ -39,6 +39,7 @@ type partialConfig struct {
 
 type Inertia struct {
 	baseURL                   string
+	baseURLParsed             *url.URL
 	rootTemplate              string
 	rootHotTemplate           string
 	rootErrorTemplate         string
@@ -81,6 +82,9 @@ func Must(inr *Inertia, err error) *Inertia {
 
 func NewWithValidation(baseURL string, opts ...Option) (*Inertia, error) {
 	inr := New(baseURL, opts...)
+	if inr.baseURLParsed == nil {
+		return nil, ErrBaseURLEmpty
+	}
 	if err := inr.ParseTemplates(); err != nil {
 		return nil, fmt.Errorf("failed to parse templates: %w", err)
 	}
@@ -144,6 +148,11 @@ func New(baseURL string, opts ...Option) *Inertia {
 
 	if inr.rootErrorTemplate == "" {
 		inr.rootErrorTemplate = "error.gohtml"
+	}
+
+	inr.baseURLParsed = parseInertiaBaseURL(inr.baseURL)
+	if inr.baseURLParsed != nil {
+		inr.baseURL = inr.baseURLParsed.String()
 	}
 
 	inr.registerCSRFSharedProp()
@@ -637,16 +646,52 @@ func parseHeaderList(value string) map[string]struct{} {
 	return set
 }
 
-// setFlashSessionData writes all accumulated data to the session in one batch.
+// setFlashSessionData persists flash-related props (flash/errors/old) into the session.
+// It is only needed for redirect-like responses (3xx or 409 with X-Inertia-Location),
+// so we skip it for normal renders and for Precognition requests.
 func (i *Inertia) setFlashSessionData(c fiber.Ctx) {
 	if i.sessionStore == nil {
 		return
 	}
 
-	if props := i.getContextKeyProps(c); len(props) > 0 {
-		if err := i.sessionStore.Flash(c, string(ContextKeyProps), props); err != nil {
-			i.logger.ErrorContext(c, "could not set flash session props", "error", err)
-		}
+	// Precognition requests should never write to flash/session.
+	if i.isPrecognitionRequest(c) {
+		return
+	}
+
+	status := c.Response().StatusCode()
+	isRedirect := status == fiber.StatusMovedPermanently ||
+		status == fiber.StatusFound ||
+		status == fiber.StatusSeeOther ||
+		status == fiber.StatusTemporaryRedirect ||
+		status == fiber.StatusPermanentRedirect
+	isInertiaLocationConflict := status == fiber.StatusConflict && len(c.Response().Header.Peek(HeaderLocation)) > 0
+	if !isRedirect && !isInertiaLocationConflict {
+		return
+	}
+
+	props := i.getContextKeyProps(c)
+	if len(props) == 0 {
+		return
+	}
+
+	// Only persist flash-related props that are meant to survive redirects.
+	flashData := make(map[string]any)
+	if data, ok := props[ContextPropsFlash].(map[string]string); ok && len(data) > 0 {
+		flashData[ContextPropsFlash] = data
+	}
+	if data, ok := props[ContextPropsErrors].(map[string]string); ok && len(data) > 0 {
+		flashData[ContextPropsErrors] = data
+	}
+	if data, ok := props[ContextPropsOld].(map[string]any); ok && len(data) > 0 {
+		flashData[ContextPropsOld] = data
+	}
+	if len(flashData) == 0 {
+		return
+	}
+
+	if err := i.sessionStore.Flash(c, string(ContextKeyProps), flashData); err != nil {
+		i.logger.ErrorContext(c, "could not set flash session props", "error", err)
 	}
 }
 

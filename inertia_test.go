@@ -272,6 +272,38 @@ func TestInertia_LazyPropError(t *testing.T) {
 	assert.NotContains(t, page.Props, "failingData") // Should not include failing prop
 }
 
+func TestInertia_LazyProp_WithFlash_WithRedirect(t *testing.T) {
+	store := newTestStore()
+	adapter := goinertia.NewFiberSessionAdapter[*session.Session](store)
+	ta := inertiat.NewTestAppWithErrorHandler(t, goinertia.WithSessionStore(adapter))
+
+	// First request: set lazy prop + flash and redirect (flash should persist, lazy prop must not break session encoding).
+	//nolint:bodyclose // tests
+	resp1, _ := ta.DoInertiaPost(func(c fiber.Ctx) error {
+		ta.Inrt.WithLazyProp(c, "expensiveData", func(_ context.Context) (any, error) {
+			return "expensive result", nil
+		})
+		ta.Inrt.WithFlashSuccess(c, "Saved!")
+		return ta.Inrt.Redirect(c, "/page")
+	}, map[string]string{
+		"path": "/set",
+	})
+	require.Equal(t, http.StatusSeeOther, resp1.StatusCode)
+
+	// Second request: flash should be loaded from session.
+	//nolint:bodyclose // tests
+	resp2, body := ta.DoInertiaGet(func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Page", map[string]any{"ok": true})
+	}, map[string]string{
+		"path": "/page",
+	}, resp1.Cookies()...)
+	require.Equal(t, http.StatusOK, resp2.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	flash, ok := page.Props["flash"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "Saved!", flash["success"])
+}
+
 func TestInertia_LazyPropShared(t *testing.T) {
 	callCount := 0
 
@@ -476,7 +508,8 @@ func TestInertia_CanExposeDetailsCallback(t *testing.T) {
 		"X-Debug": "1",
 	})
 	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
-	assert.Contains(t, body, `detailed failure: detailed failure`)
+	assert.Contains(t, body, `detailed failure`)
+	assert.NotContains(t, body, `detailed failure: detailed failure`)
 
 	//nolint:bodyclose // tests
 	resp, body = ta.DoInertiaGet(handler, map[string]string{
@@ -1048,6 +1081,27 @@ func TestInertia_Flash_InvalidVersion_Get(t *testing.T) {
 	}, req)
 	require.Equal(t, http.StatusConflict, resp1.StatusCode)
 	require.Equal(t, "http://localhost.loc:3000/test", resp1.Header.Get(goinertia.HeaderLocation))
+}
+
+func TestInertia_VersionMismatchLocation_JoinBaseURL(t *testing.T) {
+	inrt := inertiat.NewForTest("http://localhost.loc:3000/")
+	app := fiber.New()
+	app.Use(inrt.Middleware())
+
+	// Route isn't required (middleware intercepts), but defining one makes intent explicit.
+	app.Get("/test", func(c fiber.Ctx) error {
+		return inrt.Render(c, "Home", map[string]any{
+			"ok": true,
+		})
+	})
+
+	req := inertiat.NewInertiaRequest(http.MethodGet, "/test?x=1", nil)
+	req.Header.Set(goinertia.HeaderVersion, "bad")
+
+	//nolint:bodyclose // tests
+	resp := inertiat.Do(t, app, req)
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
+	require.Equal(t, "http://localhost.loc:3000/test?x=1", resp.Header.Get(goinertia.HeaderLocation))
 }
 
 func TestInertia_Flash_InvalidVersion_Post(t *testing.T) {
@@ -1664,6 +1718,38 @@ func TestInertia_PrecognitionErrors(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(body), &payload))
 	assert.Equal(t, []string{"Invalid"}, payload.Errors["email"])
+}
+
+func TestInertia_PrecognitionDoesNotFlashToSession(t *testing.T) {
+	store := newTestStore()
+	adapter := goinertia.NewFiberSessionAdapter[*session.Session](store)
+	ta := inertiat.NewTestApp(t, goinertia.WithSessionStore(adapter))
+
+	// 1) Precognition request responds with 422 and must not pollute flash/session.
+	//nolint:bodyclose // tests
+	resp1, _ := ta.DoInertiaGet(func(c fiber.Ctx) error {
+		ta.Inrt.WithErrors(c, map[string]string{
+			"email": "Invalid",
+		})
+		return ta.Inrt.Render(c, "Home", map[string]any{})
+	}, map[string]string{
+		"path":                       "/precog",
+		goinertia.HeaderPrecognition: "true",
+	})
+	require.Equal(t, http.StatusUnprocessableEntity, resp1.StatusCode)
+
+	// 2) Next normal visit should not see those errors.
+	//nolint:bodyclose // tests
+	resp2, body := ta.DoInertiaGet(func(c fiber.Ctx) error {
+		return ta.Inrt.Render(c, "Home", map[string]any{})
+	}, map[string]string{
+		"path": "/home",
+	}, resp1.Cookies()...)
+	require.Equal(t, http.StatusOK, resp2.StatusCode)
+	page := inertiat.DecodePage(t, body)
+	errs, ok := page.Props["errors"].(map[string]any)
+	require.True(t, ok)
+	assert.Empty(t, errs)
 }
 
 func TestInertia_PrecognitionValidateOnly(t *testing.T) {
