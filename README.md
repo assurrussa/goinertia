@@ -180,9 +180,10 @@ Comprehensive documentation is available in the `docs/` directory:
 
 Check the `examples/` directory for fully functional sample applications:
 
-- **basic-app**: [A simple vue app](examples/basic-app/main.go) implementation showing routing, layout, and props.
-- **basic-app-ssr**: [A simple vue app with SSR](examples/basic-app-ssr/main.go) implementation showing routing, layout,
-  and props.
+- **basic-app**: [A simple Vue app](examples/basic-app/main.go) showing routing, layout, deferred/once props, and Precognition.
+- **basic-app-ssr**: [A simple Vue app with SSR](examples/basic-app-ssr/main.go) showing the same flow with server-side rendering.
+- **basic-app-react**: [A simple React app](examples/basic-app-react/main.go) showing the same backend API working with `@inertiajs/react`.
+- **basic-app-react-ssr**: [A simple React app with SSR](examples/basic-app-react-ssr/main.go) showing Fiber + goinertia + React SSR wiring.
 
 ## License
 

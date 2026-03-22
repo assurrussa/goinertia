@@ -1,13 +1,13 @@
-# basic-app
+# basic-app-react
 
-A minimal Fiber + goinertia example with a Vue client.
+A minimal Fiber + goinertia example with a React client.
 
 ## Run
 
 ### 1) Install frontend deps
 
 ```bash
-cd examples/basic-app
+cd examples/basic-app-react
 npm install
 ```
 
@@ -26,7 +26,7 @@ npm run dev
 ### 3) Run the Go server from repo root
 
 ```bash
-go run ./examples/basic-app
+go run ./examples/basic-app-react
 ```
 
 Then open http://localhost:8383

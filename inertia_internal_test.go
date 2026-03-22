@@ -1,6 +1,7 @@
 package goinertia
 
 import (
+	"context"
 	"errors"
 	"html/template"
 	"io/fs"
@@ -140,7 +141,7 @@ func TestInertia_TemplateError(t *testing.T) {
 			"user": "John",
 		})
 	})
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test error: %v", err)

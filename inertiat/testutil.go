@@ -2,6 +2,7 @@ package inertiat
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -185,7 +186,7 @@ func NewRequest(
 	headers map[string]string,
 	cookies ...*http.Cookie,
 ) *http.Request {
-	req := httptest.NewRequest(method, target, body)
+	req := httptest.NewRequestWithContext(context.Background(), method, target, body)
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
