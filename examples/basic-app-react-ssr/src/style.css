@@ -1,0 +1,272 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --primary-color: #4f46e5;
+  --primary-hover: #4338ca;
+  --bg-color: #f3f4f6;
+  --card-bg: #ffffff;
+  --text-main: #111827;
+  --text-secondary: #6b7280;
+  --border-color: #e5e7eb;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  margin: 0;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Layout */
+.app-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+/* Navigation */
+nav {
+  background: var(--card-bg);
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  margin-bottom: 2rem;
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+nav a {
+  text-decoration: none;
+  color: var(--text-secondary);
+  font-weight: 500;
+  transition: all 0.2s;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+}
+
+nav a:hover, nav a.active {
+  color: var(--primary-color);
+  background-color: #eef2ff;
+}
+
+/* Typography */
+h1 {
+  font-size: 2.25rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text-main);
+  margin-bottom: 1rem;
+}
+
+p {
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+}
+
+/* Flash Messages */
+.flash {
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  font-weight: 500;
+}
+.flash-success {
+  background-color: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+.flash-error {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+/* Cards */
+.card {
+  background: var(--card-bg);
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-color);
+}
+
+/* Buttons */
+button, .btn {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.625rem 1.25rem;
+  border-radius: 8px;
+  font-weight: 500;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  text-decoration: none;
+}
+
+button:hover, .btn:hover {
+  background-color: var(--primary-hover);
+}
+
+.btn.secondary {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.btn.secondary:hover {
+  background: #d1d5db;
+}
+
+.panel {
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px dashed #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.muted {
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.label {
+  font-weight: 600;
+  color: #374151;
+}
+
+.chip {
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  text-decoration: none;
+  color: #374151;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.chip.active {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #3730a3;
+}
+
+.user-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.user-item {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.user-name {
+  font-weight: 600;
+}
+
+.user-meta {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.pager {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.diagnostics {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.diagnostics pre {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.form-grid {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+  color: #374151;
+  font-weight: 600;
+}
+
+.input {
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  font-size: 0.95rem;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #c7d2fe;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.error {
+  color: #dc2626;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.status {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.error-page {
+  text-align: center;
+  padding: 1.5rem 1rem;
+}
+
+.error-code {
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  color: #ef4444;
+  margin-bottom: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.error-message {
+  font-size: 1.125rem;
+  margin-bottom: 1.75rem;
+}

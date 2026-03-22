@@ -12,7 +12,7 @@
     {{ if .hotServerUrl }}
     {{/* Vite dev server */}}
     <script type="module" src="/@vite/client"></script>
-    <script type="module" src="/src/js/app.ts"></script>
+    <script type="module" src="/src/app.js"></script>
     {{ else }}
     {{/* Production - use compiled assets */}}
     <link href="{{ asset "app.css" }}" rel="stylesheet">

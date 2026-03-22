@@ -3,13 +3,12 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>goinertia basic app</title>
+    <title>goinertia basic react app</title>
+    <link rel="icon" type="image/svg+xml" href="{{ asset "favicon.svg" }}">
     {{ if .hotServerUrl }}
-    {{/* Vite dev server */}}
     <script type="module" src="/@vite/client"></script>
-    <script type="module" src="/src/app.js"></script>
+    <script type="module" src="/src/app.jsx"></script>
     {{ else }}
-    {{/* Production - use compiled assets */}}
     <link href="{{ asset "app.css" }}" rel="stylesheet">
     <script type="module" src="{{ asset "app.js" }}"></script>
     {{ end }}
