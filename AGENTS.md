@@ -25,13 +25,15 @@ Read context in this order:
 4. Shared wiki pages only after local grounding.
 
 Use `$project-context-router` for work that needs cross-project context or the
-shared wiki. The shared wiki root is `/Users/amir/agents/agent-context`.
+shared wiki. Expose the shared wiki root through `AGENT_CONTEXT_ROOT` or let `$project-context-router` resolve it for the current session.
 Relevant pages are:
 
-- `/Users/amir/agents/agent-context/streams/wiki/index.md`
-- `/Users/amir/agents/agent-context/streams/wiki/glossary.md`
-- `/Users/amir/agents/agent-context/streams/wiki/platforms/goinertia.md`
-- `/Users/amir/agents/agent-context/streams/wiki/platforms/gofiber.md`
+Do not hard-code machine-local absolute paths in this public repository.
+
+- `streams/wiki/index.md`
+- `streams/wiki/glossary.md`
+- `streams/wiki/platforms/goinertia.md`
+- `streams/wiki/platforms/gofiber.md`
 
 If local docs or code conflict with the shared wiki, treat the wiki as stale.
 When the task includes documentation upkeep and the shared context is writable,
