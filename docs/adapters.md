@@ -94,8 +94,23 @@ props, view data and page metadata added through the embedded core API. Flash,
 old input and validation errors added through that API also persist on redirects
 and Inertia location conflicts, with the same consume-once session policy.
 
-Each Fiber manager owns its request State and callback/lazy cache lifecycle;
-legacy and native managers cannot reuse each other's callback contexts.
+Each Fiber manager owns its request State, helper-created props/view/history
+bindings and callback/lazy cache lifecycle. Switching managers in the same
+request cannot import another manager's callbacks or redirect flash, old input
+and validation errors. Returning to the original manager retains its bindings.
+This ownership applies before explicit State access as well as after it.
+
+The exported ContextKeyProps/ViewData/PageMeta Locals remain a compatibility
+channel for direct host writes. The first manager accessing a new raw binding
+adopts it, and its raw lazy callbacks use that manager's rendering context
+contract. Adapter-published bindings belong to that manager; another manager
+ignores them. Replacing a raw Locals map or metadata binding supplies new input
+to the next accessing manager. An in-place edit to a published map edits its
+current owner's data. Explicitly assigning that same binding cannot transfer
+ownership. Share data deliberately through each manager's helpers/core State,
+shared-prop configuration or Render arguments. SessionStore still controls its
+own storage namespace; using the same SessionStore deliberately shares its
+persisted flash channel across requests.
 State and Locals share synchronized map bindings. In-place additions, updates
 and deletions are visible through both. Replacing or clearing `State.Props` or
 `State.ViewData` takes effect on the next State/helper/render/redirect access;

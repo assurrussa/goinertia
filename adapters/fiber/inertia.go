@@ -84,6 +84,10 @@ func validate(i *Inertia) (*Inertia, error) {
 type (
 	fiberContextKey struct{}
 	stateKey        struct{ owner *Inertia }
+	helperKey       struct{ owner *Inertia }
+	propsOwnerKey   struct{}
+	viewOwnerKey    struct{}
+	metaOwnerKey    struct{}
 )
 
 // Retain the last synchronized map bindings, not copies of their contents.
@@ -92,9 +96,16 @@ type (
 type requestState struct {
 	core.State
 	initialContext lifecycleContext
-	props, view    map[string]any
-	invalidView    bool
-	pageMeta       any
+	requestValues
+}
+
+// Helper-only requests retain just bindings and their owner. Full request
+// metadata and lifecycle context are still captured only by State/Render.
+type requestValues struct {
+	owner       *Inertia
+	props, view map[string]any
+	invalidView bool
+	pageMeta    any
 }
 
 type lifecycleContext struct {
@@ -145,22 +156,27 @@ func RequestMeta(c fiber.Ctx) core.RequestMeta {
 }
 
 func (i *Inertia) state(c fiber.Ctx) *core.State {
-	s, ok := c.Locals(stateKey{owner: i}).(*requestState)
-	if !ok {
-		s = &requestState{}
-		if i.legacy {
-			s.State = *core.NewLegacyState(c.Context(), c, RequestMeta(c))
-		} else {
-			s.initialContext = lifecycleContext{Context: c.Context(), fiber: c}
-			s.State = *core.NewState(&s.initialContext, RequestMeta(c))
-		}
-		i.readLocalState(c, &s.State)
-		s.captureBindings()
-		c.Locals(stateKey{owner: i}, s)
-	} else {
+	if s, ok := c.Locals(stateKey{owner: i}).(*requestState); ok {
 		i.refreshContext(c, &s.State)
 		i.reconcileState(c, s)
+		return &s.State
 	}
+	s := &requestState{requestValues: requestValues{owner: i}}
+	if i.legacy {
+		s.State = *core.NewLegacyState(c.Context(), c, RequestMeta(c))
+	} else {
+		s.initialContext = lifecycleContext{Context: c.Context(), fiber: c}
+		s.State = *core.NewState(&s.initialContext, RequestMeta(c))
+	}
+	if helpers, ok := c.Locals(helperKey{owner: i}).(*requestValues); ok {
+		helpers.load(&s.State)
+		i.reconcileBindings(c, &s.State, helpers)
+	} else {
+		i.readLocalState(c, &s.State)
+	}
+	s.captureBindings()
+	i.publishValues(c, &s.State, &s.requestValues)
+	c.Locals(stateKey{owner: i}, s)
 	return &s.State
 }
 
@@ -183,96 +199,150 @@ func sameMap(left, right map[string]any) bool {
 	return reflect.ValueOf(left).Pointer() == reflect.ValueOf(right).Pointer()
 }
 
-func (s *requestState) captureBindings() {
-	s.props, s.view = s.Props, s.ViewData
-	s.invalidView = s.InvalidViewData
-	s.pageMeta = s.LegacyPageMeta()
+func (s *requestState) captureBindings() { s.capture(&s.State) }
+
+func (v *requestValues) capture(s *core.State) {
+	v.props, v.view = s.Props, s.ViewData
+	v.invalidView = s.InvalidViewData
+	v.pageMeta = s.LegacyPageMeta()
+}
+
+func (v *requestValues) load(s *core.State) {
+	s.Props, s.ViewData, s.InvalidViewData = v.props, v.view, v.invalidView
+	s.SetLegacyPageMeta(v.pageMeta)
+}
+
+// Public Locals remain the compatibility channel for direct caller writes.
+// An unchanged published binding belongs to its manager, including nil clears.
+// A fresh raw binding is adopted and claimed by the next manager accessing it.
+func (i *Inertia) localProps(c fiber.Ctx) (map[string]any, bool) {
+	props, _ := c.Locals(ContextKeyProps).(map[string]any)
+	owner, ok := c.Locals(propsOwnerKey{}).(*requestValues)
+	return props, !ok || owner.owner == i || !sameMap(props, owner.props)
+}
+
+func (i *Inertia) localView(c fiber.Ctx) (view map[string]any, invalid, readable bool) {
+	raw := c.Locals(ContextKeyViewData)
+	view, valid := raw.(map[string]any)
+	invalid = raw != nil && !valid
+	owner, ok := c.Locals(viewOwnerKey{}).(*requestValues)
+	return view, invalid, !ok || owner.owner == i || !sameMap(view, owner.view) || invalid != owner.invalidView
+}
+
+func (i *Inertia) localMeta(c fiber.Ctx) (any, bool) {
+	var local core.State
+	local.SetLegacyPageMeta(c.Locals(ContextKeyPageMeta))
+	meta := local.LegacyPageMeta()
+	owner, ok := c.Locals(metaOwnerKey{}).(*requestValues)
+	return meta, !ok || owner.owner == i || meta != owner.pageMeta
+}
+
+func (i *Inertia) publishProps(c fiber.Ctx, s *core.State, owner *requestValues) {
+	c.Locals(ContextKeyProps, s.Props)
+	c.Locals(propsOwnerKey{}, owner)
+}
+
+func (i *Inertia) publishView(c fiber.Ctx, s *core.State, owner *requestValues) {
+	if !s.InvalidViewData {
+		c.Locals(ContextKeyViewData, s.ViewData)
+	} else {
+		c.Locals(ContextKeyViewData, struct{}{})
+	}
+	c.Locals(viewOwnerKey{}, owner)
+}
+
+func (i *Inertia) publishMeta(c fiber.Ctx, s *core.State, owner *requestValues) {
+	c.Locals(ContextKeyPageMeta, s.LegacyPageMeta())
+	c.Locals(metaOwnerKey{}, owner)
+}
+
+func (i *Inertia) publishValues(c fiber.Ctx, s *core.State, owner *requestValues) {
+	if s.Props != nil {
+		i.publishProps(c, s, owner)
+	}
+	if s.ViewData != nil || s.InvalidViewData {
+		i.publishView(c, s, owner)
+	}
+	if s.LegacyPageMeta() != nil {
+		i.publishMeta(c, s, owner)
+	}
 }
 
 func (i *Inertia) reconcileState(c fiber.Ctx, s *requestState) {
-	localProps, _ := c.Locals(ContextKeyProps).(map[string]any)
+	i.reconcileBindings(c, &s.State, &s.requestValues)
+}
+
+func (i *Inertia) reconcileBindings(c fiber.Ctx, s *core.State, saved *requestValues) {
+	localProps, readable := i.localProps(c)
 	switch {
-	case !sameMap(s.Props, s.props):
-		c.Locals(ContextKeyProps, s.Props)
-	case !sameMap(localProps, s.props):
+	case !sameMap(s.Props, saved.props):
+		i.publishProps(c, s, saved)
+	case readable && !sameMap(localProps, saved.props):
 		s.Props = localProps
+		i.publishProps(c, s, saved)
 	}
-	localView, valid := c.Locals(ContextKeyViewData).(map[string]any)
-	invalid := c.Locals(ContextKeyViewData) != nil && !valid
+	localView, invalid, readable := i.localView(c)
 	switch {
-	case !sameMap(s.ViewData, s.view) || s.InvalidViewData != s.invalidView:
-		i.syncViewData(c, &s.State)
-	case !sameMap(localView, s.view) || invalid != s.invalidView:
+	case !sameMap(s.ViewData, saved.view) || s.InvalidViewData != saved.invalidView:
+		i.publishView(c, s, saved)
+	case readable && (!sameMap(localView, saved.view) || invalid != saved.invalidView):
 		s.ViewData, s.InvalidViewData = localView, invalid
+		i.publishView(c, s, saved)
 	}
-	// Normalize opaque legacy metadata before comparison; invalid Locals values
-	// may be uncomparable, whereas LegacyPageMeta returns only a pointer or nil.
-	var local core.State
-	local.SetLegacyPageMeta(c.Locals(ContextKeyPageMeta))
+	localMeta, readable := i.localMeta(c)
 	switch {
-	case s.LegacyPageMeta() != s.pageMeta:
-		c.Locals(ContextKeyPageMeta, s.LegacyPageMeta())
-	case local.LegacyPageMeta() != s.pageMeta:
-		s.SetLegacyPageMeta(local.LegacyPageMeta())
+	case s.LegacyPageMeta() != saved.pageMeta:
+		i.publishMeta(c, s, saved)
+	case readable && localMeta != saved.pageMeta:
+		s.SetLegacyPageMeta(localMeta)
+		i.publishMeta(c, s, saved)
 	}
-	s.captureBindings()
+	saved.capture(s)
 }
 
-func (i *Inertia) syncViewData(c fiber.Ctx, s *core.State) {
-	if !s.InvalidViewData {
-		c.Locals(ContextKeyViewData, s.ViewData)
-	} else if _, valid := c.Locals(ContextKeyViewData).(map[string]any); valid || c.Locals(ContextKeyViewData) == nil {
-		// Preserve the invalid-data error when State marks otherwise valid Locals
-		// as invalid. Existing malformed values can remain in place.
-		c.Locals(ContextKeyViewData, struct{}{})
-	}
-}
-
-// Prop mutation needs only Locals. Full metadata/context ownership is captured
-// when rendering or when a native consumer explicitly requests State.
 func (i *Inertia) readLocalState(c fiber.Ctx, s *core.State) {
-	if props, ok := c.Locals(ContextKeyProps).(map[string]any); ok {
+	if props, readable := i.localProps(c); readable {
 		s.Props = props
 	}
 	i.readViewData(c, s)
-	if meta := c.Locals(ContextKeyPageMeta); meta != nil {
+	if meta, readable := i.localMeta(c); readable {
 		s.SetLegacyPageMeta(meta)
 	}
 }
 
 func (i *Inertia) readViewData(c fiber.Ctx, s *core.State) {
-	if raw := c.Locals(ContextKeyViewData); raw != nil {
-		data, ok := raw.(map[string]any)
-		s.ViewData = data
-		s.InvalidViewData = !ok
+	if view, invalid, readable := i.localView(c); readable {
+		s.ViewData, s.InvalidViewData = view, invalid
 	}
 }
 
-// Reuse native state when it is installed. Legacy helper-only requests keep
-// their lightweight Locals path without capturing metadata or context.
 func (i *Inertia) mutationState(c fiber.Ctx, local *core.State) *core.State {
 	if s, ok := c.Locals(stateKey{owner: i}).(*requestState); ok {
 		i.reconcileState(c, s)
 		return &s.State
 	}
-	i.readLocalState(c, local)
+	if saved, ok := c.Locals(helperKey{owner: i}).(*requestValues); ok {
+		saved.load(local)
+		i.reconcileBindings(c, local, saved)
+	} else {
+		i.readLocalState(c, local)
+	}
 	return local
 }
 
 func (i *Inertia) syncState(c fiber.Ctx, s *core.State) {
 	if saved, ok := c.Locals(stateKey{owner: i}).(*requestState); ok {
 		i.reconcileState(c, saved)
+		i.publishValues(c, s, &saved.requestValues)
 		return
 	}
-	if meta := s.LegacyPageMeta(); meta != nil {
-		c.Locals(ContextKeyPageMeta, meta)
+	saved, ok := c.Locals(helperKey{owner: i}).(*requestValues)
+	if !ok {
+		saved = &requestValues{owner: i}
+		c.Locals(helperKey{owner: i}, saved)
 	}
-	if s.Props != nil {
-		c.Locals(ContextKeyProps, s.Props)
-	}
-	if s.ViewData != nil {
-		c.Locals(ContextKeyViewData, s.ViewData)
-	}
+	saved.capture(s)
+	i.publishValues(c, s, saved)
 }
 
 // State returns the concrete per-request state for native consumers.
