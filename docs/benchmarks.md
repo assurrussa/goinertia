@@ -36,7 +36,7 @@ copies ensure safe ownership and must not be described as adapter-only overhead.
 The original middleware benchmark includes app.Test overhead; the comparison
 matrix uses direct dispatch and must not be mixed with its timing numbers.
 
-## Local comparison, 2026-10-02
+## Initial extraction comparison, 2026-10-02 (02e9250)
 
 After the concurrent API/GeoIP test jobs finished, all cases passed a one-iteration
 correctness preflight. Five old/new series then ran sequentially on an Apple M5
@@ -47,7 +47,7 @@ run, and 82–84% afterward, without active swap I/O in those samples. No other
 processes were stopped. Timing had been deferred while the other jobs ran.
 
 Medians from five samples follow; each cell is **ns/op / B/op / allocs/op**.
-The [complete 32-scenario matrix](benchmark-results.csv) also includes the new
+The [complete 32-scenario matrix](benchmark-initial-results.csv) also includes the new
 legacy facade, all lazy counts and all parallel cases.
 
 | Scenario | Corrected old Fiber | Native Fiber | Native HTTP |
@@ -80,3 +80,59 @@ timing difference in this sample. Allocation increases remain measurable.
 No zero-loss claim, network SSR throughput claim or performance acceptance
 threshold is implied. Repeat longer runs on a dedicated host before making
 deployment capacity or performance budget decisions.
+
+## Optimization follow-up
+
+Allocation profiles of the same flash fixture identified eager State/context/
+metadata capture, allocating Vary token splits and unused page-building maps.
+Prop/flash mutation now uses a temporary concrete State for Locals, capturing
+owned protocol metadata only for rendering or explicit native State access.
+Vary checks scan without split allocations. Empty partial configuration and
+unused local/override maps stay absent. Legacy callbacks keep Fiber Ctx without
+an additional neutral helper; native callbacks retain that helper. HTML rendering
+reuses the State already used to build its page and still refreshes direct legacy
+Locals view data. Required metadata and SSR body ownership remain intact.
+
+The initial comparison is preserved above. The follow-up uses the same corrected
+original SHA, unchanged harness, compiler and four execution threads, with five
+sequential series whose old/new order alternates. The ownership benchmark is a
+separate workload rather than a subtraction from adapter timing. See also
+[the architecture and maintenance decision](core-tradeoffs.md).
+
+
+Follow-up medians, **ns/op / B/op / allocs/op**:
+
+| Scenario | Old Fiber ns / B / allocs | New facade ns / B / allocs | Native Fiber ns / B / allocs | Native HTTP ns / B / allocs |
+|---|---:|---:|---:|---:|
+| JSON/props=0/lazy=0 | 1306 / 1289 / 23 | 1333 / 1221 / 14 | 1264 / 1269 / 15 | 950 / 1721 / 19 |
+| JSON/props=10/lazy=0 | 2530 / 2731 / 30 | 2175 / 1998 / 17 | 2196 / 2047 / 18 | 1864 / 2499 / 22 |
+| JSON/props=100/lazy=10 | 17811 / 20250 / 48 | 13456 / 13199 / 28 | 13674 / 13253 / 29 | 13224 / 13460 / 33 |
+| JSON/props=100/lazy=10/parallel | 7648 / 20284 / 48 | 5322 / 13236 / 28 | 5457 / 13281 / 29 | 5410 / 13492 / 33 |
+| HTML/props=10/lazy=0 | 8141 / 11790 / 129 | 7669 / 11157 / 118 | 7668 / 11205 / 119 | 7364 / 11584 / 124 |
+| HTML/props=100/lazy=10 | 28551 / 42175 / 148 | 24115 / 35193 / 130 | 24449 / 35236 / 131 | 23959 / 34549 / 136 |
+| flash/props=10/lazy=0 | 861 / 1545 / 19 | 687 / 1297 / 9 | 698 / 1297 / 9 | 1090 / 2392 / 22 |
+| SSR-cache/props=10/lazy=0 | 9862 / 13032 / 156 | 9193 / 12400 / 145 | 9292 / 12448 / 146 | 8986 / 12814 / 151 |
+| SSR-retry/props=10/lazy=0 | 10663 / 14075 / 172 | 10132 / 13439 / 161 | 10136 / 13490 / 162 | 9822 / 13856 / 167 |
+| SSR-cancel/props=10/lazy=0 | 3170 / 4379 / 60 | 2835 / 3750 / 49 | 2857 / 3798 / 50 | 2553 / 4130 / 52 |
+
+The [complete current matrix](benchmark-results.csv) includes every lazy/parallel
+case. CPU idle was 81–85% before the final run and 73–84% during the sampled
+window. A few swap-in pages were observed before timing; none in the sampled
+mid-run window. All five series passed status and per-request lazy-count checks.
+
+Benchstat detects no statistically significant time regression across the 32
+measured scenarios for either the root facade or native Fiber. Empty facade JSON
+medians are 1306 → 1333 ns/op, with no resolved timing difference (p=0.310);
+allocations decrease 23 → 14 and bytes 1289 → 1221. Native Fiber empty JSON is
+1264 ns/op, 1269 B/op, 15 allocations. Flash improves from 861 ns/op, 1545 B/op,
+19 allocations to 687/1297/9 for the facade and 698/1297/9 for native Fiber.
+Empty HTML has no resolved timing difference in the final sample. Larger
+JSON/HTML pages have measurable improvements. The standalone ownership fixture
+measures 481 ns/op, 168 B/op and 14 allocations, with required copies preserved.
+
+Some raw samples still have substantial variance. No resolved regression in a
+short workstation matrix proves neither exact equality nor a universal zero-loss
+guarantee. Native HTTP flash remains costlier than old Fiber (1090 ns/op, 2392
+B/op, 22 allocations versus 861/1545/19), reflecting the native lifecycle and
+fixture differences; it is not hidden behind the Fiber results. Product scope
+and an accepted performance budget remain review decisions.

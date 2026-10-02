@@ -39,6 +39,10 @@ fields, without creating a complete request header map. State may be mutated
 by the current handler; it is not safe for concurrent mutation or reuse across
 requests.
 
+Fiber prop/flash helpers defer full metadata capture until rendering or explicit
+State access. Reading props does not create an empty props map. A State already
+requested by a native consumer is synchronized when helpers mutate its Locals.
+
 Headers, 302/301 to 303 normalization, and redirect flash writes happen before
 the first final `WriteHeader`. Flash hooks can set cookies at that point.
 Arbitrary response bodies stream directly; only library-owned rendered pages

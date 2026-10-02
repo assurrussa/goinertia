@@ -357,6 +357,10 @@ func (i *Inertia) BuildPage(c *State, component string, props map[string]any) (*
 
 // parsePartialConfig extracts partial reload configuration.
 func (i *Inertia) parsePartialConfig(c *State, component string) *partialConfig {
+	if c.Meta.Reset == "" && c.Meta.ExceptOnceProps == "" && c.Meta.PartialOnly == "" &&
+		c.Meta.PartialExcept == "" && c.Meta.ScrollMergeIntent == "" {
+		return nil
+	}
 	cfg := &partialConfig{
 		reset:      parseHeaderList(c.Meta.Reset),
 		exceptOnce: parseHeaderList(c.Meta.ExceptOnceProps),
@@ -493,8 +497,7 @@ func (i *Inertia) addSharedProps(c *State, page *PageDTO, partial *partialConfig
 
 // addLocalContextProps adds local context props to the page.
 func (i *Inertia) addLocalContextProps(c *State, page *PageDTO, partial *partialConfig) error {
-	props := i.getContextKeyProps(c)
-	i.addRequestProps(c, page, props, partial)
+	i.addRequestProps(c, page, c.Props, partial)
 	return nil
 }
 
@@ -506,14 +509,16 @@ func (i *Inertia) addRequestProps(c *State, page *PageDTO, props map[string]any,
 }
 
 func (i *Inertia) collectOverrideKeys(c *State, props map[string]any) map[string]struct{} {
+	if len(i.sharedProps) == 0 {
+		return nil
+	}
 	override := make(map[string]struct{})
 
 	for key := range props {
 		override[key] = struct{}{}
 	}
 
-	ctxProps := i.getContextKeyProps(c)
-	for key := range ctxProps {
+	for key := range c.Props {
 		override[key] = struct{}{}
 	}
 

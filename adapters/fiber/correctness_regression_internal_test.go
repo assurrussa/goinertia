@@ -240,3 +240,24 @@ func TestLegacyMetadataLocalKey(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, page.EncryptHistory)
 }
+
+func TestPropsBeforeAndAfterNativeState(t *testing.T) {
+	t.Parallel()
+	i := New("https://app.example")
+	c := fibert.Default()
+	i.WithProp(c, "first", "before")
+	i.WithEncryptHistory(c)
+	require.Nil(t, c.Locals(stateKey{}), "props alone must not capture protocol metadata")
+	s := i.State(c)
+	require.Equal(t, "before", s.Props["first"])
+	i.WithFlashSuccess(c, "saved")
+	i.WithProp(c, "second", "after")
+	i.WithClearHistory(c)
+	require.Same(t, s, i.State(c))
+	require.Equal(t, "after", s.Props["second"])
+	page, err := i.buildPage(c, "Page", nil)
+	require.NoError(t, err)
+	require.True(t, page.EncryptHistory)
+	require.True(t, page.ClearHistory)
+	require.Equal(t, map[string]string{"success": "saved"}, page.Props["flash"])
+}

@@ -40,17 +40,30 @@ func addVaryHeader(c fiber.Ctx, value string) {
 	if value == "" {
 		return
 	}
-	current := string(c.Response().Header.Peek("Vary"))
-	if current == "" {
+	current := c.Response().Header.Peek("Vary")
+	if core.HasVaryToken(string(current), value) {
+		return
+	}
+	if len(current) == 0 {
 		c.Set("Vary", value)
 		return
 	}
-	for _, item := range strings.Split(current, ",") {
-		if strings.EqualFold(strings.TrimSpace(item), value) {
-			return
+	c.Set("Vary", string(current)+", "+value)
+}
+
+func (i *Inertia) applyVary(c fiber.Ctx) {
+	if len(c.Response().Header.Peek("Vary")) == 0 {
+		value := HeaderInertia
+		if i.PrecognitionVary() {
+			value = HeaderInertia + ", " + HeaderPrecognition
 		}
+		c.Set("Vary", value)
+		return
 	}
-	c.Set("Vary", current+", "+value)
+	addVaryHeader(c, HeaderInertia)
+	if i.PrecognitionVary() {
+		addVaryHeader(c, HeaderPrecognition)
+	}
 }
 
 func IsPrecognition(c fiber.Ctx) bool {

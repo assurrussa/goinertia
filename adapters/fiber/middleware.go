@@ -11,10 +11,7 @@ import (
 // Middleware function.
 func (i *Inertia) Middleware() fiber.Handler {
 	return func(c fiber.Ctx) error {
-		addVaryHeader(c, HeaderInertia)
-		if i.PrecognitionVary() {
-			addVaryHeader(c, HeaderPrecognition)
-		}
+		i.applyVary(c)
 		method := c.Method()
 		if i.csrfTokenCheckProvider != nil && i.isMethodPost(method) {
 			if err := i.csrfTokenCheckProvider(c); err != nil {
@@ -77,10 +74,7 @@ func (i *Inertia) redirectCheck(c fiber.Ctx, err error) error {
 		return err
 	}
 
-	addVaryHeader(c, HeaderInertia)
-	if i.PrecognitionVary() {
-		addVaryHeader(c, HeaderPrecognition)
-	}
+	i.applyVary(c)
 	if i.shouldNoCacheResponse(c) {
 		c.Set(fiber.HeaderCacheControl, "no-cache")
 	}

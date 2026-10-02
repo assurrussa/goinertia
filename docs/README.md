@@ -17,3 +17,4 @@
 
 - [Native adapters and compatibility](adapters.md)
 - [Adapter comparison benchmarks](benchmarks.md)
+- [Core and adapter tradeoffs](core-tradeoffs.md)

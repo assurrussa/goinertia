@@ -29,15 +29,28 @@ func NormalizeRedirect(meta RequestMeta, status int) int {
 
 // VaryValue appends a token once, preserving existing values and wildcard.
 func VaryValue(current, value string) string {
-	for _, v := range strings.Split(current, ",") {
-		if strings.EqualFold(strings.TrimSpace(v), value) || strings.TrimSpace(v) == "*" {
-			return current
-		}
+	if HasVaryToken(current, value) {
+		return current
 	}
 	if current == "" {
 		return value
 	}
 	return current + ", " + value
+}
+
+// HasVaryToken checks tokens without allocating a split slice.
+func HasVaryToken(current, value string) bool {
+	for {
+		token, rest, more := strings.Cut(current, ",")
+		token = strings.TrimSpace(token)
+		if token == "*" || strings.EqualFold(token, value) {
+			return true
+		}
+		if !more {
+			return false
+		}
+		current = rest
+	}
 }
 
 // Location constructs an asset conflict location.

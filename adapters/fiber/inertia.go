@@ -123,25 +123,35 @@ func RequestMeta(c fiber.Ctx) core.RequestMeta {
 func (i *Inertia) state(c fiber.Ctx) *core.State {
 	s, ok := c.Locals(stateKey{}).(*core.State)
 	if !ok {
-		ctx := Context(c)
 		if i.legacy {
-			s = core.NewLegacyState(ctx, c, RequestMeta(c))
+			s = core.NewLegacyState(c.Context(), c, RequestMeta(c))
 		} else {
-			s = core.NewState(ctx, RequestMeta(c))
+			s = core.NewState(Context(c), RequestMeta(c))
 		}
 		c.Locals(stateKey{}, s)
 	}
+	i.readLocalState(c, s)
+	return s
+}
+
+// Prop mutation needs only Locals. Full metadata/context ownership is captured
+// when rendering or when a native consumer explicitly requests State.
+func (i *Inertia) readLocalState(c fiber.Ctx, s *core.State) {
 	if props, ok := c.Locals(ContextKeyProps).(map[string]any); ok {
 		s.Props = props
 	}
-	if raw := c.Locals(ContextKeyViewData); raw != nil {
-		s.ViewData, ok = raw.(map[string]any)
-		s.InvalidViewData = !ok
-	}
+	i.readViewData(c, s)
 	if meta := c.Locals(ContextKeyPageMeta); meta != nil {
 		s.SetLegacyPageMeta(meta)
 	}
-	return s
+}
+
+func (i *Inertia) readViewData(c fiber.Ctx, s *core.State) {
+	if raw := c.Locals(ContextKeyViewData); raw != nil {
+		data, ok := raw.(map[string]any)
+		s.ViewData = data
+		s.InvalidViewData = !ok
+	}
 }
 
 func (i *Inertia) syncState(c fiber.Ctx, s *core.State) {
@@ -154,13 +164,19 @@ func (i *Inertia) syncState(c fiber.Ctx, s *core.State) {
 	if s.ViewData != nil {
 		c.Locals(ContextKeyViewData, s.ViewData)
 	}
+	if saved, ok := c.Locals(stateKey{}).(*core.State); ok && saved != s {
+		i.readLocalState(c, saved)
+	}
 }
 
 // State returns the concrete per-request state for native consumers.
 func (i *Inertia) State(c fiber.Ctx) *core.State { return i.state(c) }
 
 func (i *Inertia) buildPage(c fiber.Ctx, component string, props map[string]any) (*PageDTO, error) {
-	s := i.state(c)
+	return i.buildPageWithState(c, i.state(c), component, props)
+}
+
+func (i *Inertia) buildPageWithState(c fiber.Ctx, s *core.State, component string, props map[string]any) (*PageDTO, error) {
 	if i.sessionStore != nil {
 		flash, err := i.sessionStore.GetFlash(c, string(ContextKeyProps))
 		if err == nil {
@@ -170,13 +186,6 @@ func (i *Inertia) buildPage(c fiber.Ctx, component string, props map[string]any)
 	return i.BuildPage(s, component, props)
 }
 
-func (i *Inertia) getContextKeyProps(c fiber.Ctx) map[string]any {
-	s := i.state(c)
-	if s.Props == nil {
-		s.Props = make(map[string]any)
-	}
-	return s.Props
-}
 func (i *Inertia) isPrecognitionRequest(c fiber.Ctx) bool { return IsPrecognition(c) }
 func (i *Inertia) shouldNoCacheResponse(c fiber.Ctx) bool {
 	return strings.Contains(strings.ToLower(c.Get(fiber.HeaderCacheControl)), "no-cache")
@@ -211,13 +220,11 @@ func parseHeaderList(value string) map[string]struct{} {
 	return set
 }
 
-func (i *Inertia) renderHTML(c fiber.Ctx, page *PageDTO) error {
-	addVaryHeader(c, HeaderInertia)
-	if i.PrecognitionVary() {
-		addVaryHeader(c, HeaderPrecognition)
-	}
-
-	data, err := i.RenderHTML(i.state(c), page)
+func (i *Inertia) renderHTML(c fiber.Ctx, s *core.State, page *PageDTO) error {
+	i.applyVary(c)
+	// Legacy callbacks may write view data directly to Locals while building props.
+	i.readViewData(c, s)
+	data, err := i.RenderHTML(s, page)
 	if err != nil {
 		return err
 	}
@@ -387,7 +394,8 @@ func (i *Inertia) Render(c fiber.Ctx, component string, props map[string]any) er
 		return i.renderPrecognition(c, errors)
 	}
 
-	page, err := i.buildPage(c, component, props)
+	s := i.state(c)
+	page, err := i.buildPageWithState(c, s, component, props)
 	if err != nil {
 		return fmt.Errorf("could not build page: %w", err)
 	}
@@ -396,7 +404,7 @@ func (i *Inertia) Render(c fiber.Ctx, component string, props map[string]any) er
 		return i.renderJSON(c, page)
 	}
 
-	return i.renderHTML(c, page)
+	return i.renderHTML(c, s, page)
 }
 
 // getContextKeyProps returns existing props or creates new ones.
@@ -421,7 +429,7 @@ func (i *Inertia) setFlashSessionData(c fiber.Ctx) {
 		return
 	}
 
-	props := i.getContextKeyProps(c)
+	props, _ := c.Locals(ContextKeyProps).(map[string]any)
 	if len(props) == 0 {
 		return
 	}
@@ -453,10 +461,7 @@ func (i *Inertia) renderJSON(c fiber.Ctx, page *PageDTO) error {
 		return fmt.Errorf("error marshaling page: %w", err)
 	}
 
-	addVaryHeader(c, HeaderInertia)
-	if i.PrecognitionVary() {
-		addVaryHeader(c, HeaderPrecognition)
-	}
+	i.applyVary(c)
 	c.Set(HeaderInertia, "true")
 	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 
@@ -465,97 +470,129 @@ func (i *Inertia) renderJSON(c fiber.Ctx, page *PageDTO) error {
 
 // renderHTML renders the page as HTML template.
 func (i *Inertia) WithProp(c fiber.Ctx, key string, value any) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithProp(s, key, value)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithViewData(c fiber.Ctx, key string, value any) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithViewData(s, key, value)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlashMessages(c fiber.Ctx, flashMessages ...FlashError) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithFlashMessages(s, flashMessages...)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithValidationErrors(c fiber.Ctx, errors ValidationErrors) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithValidationErrors(s, errors)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithErrors(c fiber.Ctx, errors map[string]string) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithErrors(s, errors)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithError(c fiber.Ctx, field string, message string) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithError(s, field, message)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlashSuccess(c fiber.Ctx, message string) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithFlashSuccess(s, message)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlashInfo(c fiber.Ctx, message string) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithFlashInfo(s, message)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlashWarning(c fiber.Ctx, message string) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithFlashWarning(s, message)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlashError(c fiber.Ctx, message string) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithFlashError(s, message)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlashOld(c fiber.Ctx, data map[string]any) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithFlashOld(s, data)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlash(c fiber.Ctx, key FlashLevel, message string) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithFlash(s, key, message)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithLazyProp(c fiber.Ctx, key string, fn func(context.Context) (any, error)) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithLazyProp(s, key, fn)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithMatchPropsOn(c fiber.Ctx, props ...string) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithMatchPropsOn(s, props...)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithEncryptHistory(c fiber.Ctx) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithEncryptHistory(s)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithClearHistory(c fiber.Ctx) {
-	s := i.state(c)
+	var local core.State
+	i.readLocalState(c, &local)
+	s := &local
 	i.Inertia.WithClearHistory(s)
 	i.syncState(c, s)
 }

@@ -69,3 +69,19 @@ Verification note:
   pooled-string ownership is measured separately. See docs/benchmarks.md.
 - No public release, retag, merge, host migration or production action is part
   of this implementation. Publication is a separate authorization boundary.
+
+## 2026-10-02 Profiling follow-up
+
+The initial extraction was published as a WIP draft after direct authorization.
+Flash allocation profiles identified unnecessary State/context/metadata capture
+on mutation-only requests. Those helpers now use a temporary concrete State and
+synchronize existing native state. Full owned metadata is deferred to rendering.
+Vary checks avoid token split allocations; page reads avoid empty local maps,
+override maps without shared props and empty partial configurations. Legacy
+callbacks need no additional neutral context helper. HTML uses one State per
+render while honoring direct legacy Locals view-data writes.
+
+SSR/body/metadata/session ownership remains intact without unsafe aliases or
+State pooling. Full make check/build, protocol/race, external consumer and
+GoAdmin source gates pass. Results and remaining acceptance limits are in
+docs/benchmarks.md; the product/maintenance decision is in docs/core-tradeoffs.md.
