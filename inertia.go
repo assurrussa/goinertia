@@ -992,6 +992,11 @@ func (i *Inertia) renderJSON(c fiber.Ctx, page *PageDTO) error {
 
 // renderHTML renders the page as HTML template.
 func (i *Inertia) renderHTML(c fiber.Ctx, page *PageDTO) error {
+	addVaryHeader(c, HeaderInertia)
+	if i.precognitionVary {
+		addVaryHeader(c, HeaderPrecognition)
+	}
+
 	rootTemplate, err := i.createRootTemplate()
 	if err != nil {
 		return err

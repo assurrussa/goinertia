@@ -30,7 +30,8 @@ func (i *Inertia) Middleware() fiber.Handler {
 		// Check asset version for GET requests only
 		if method == http.MethodGet && c.Get(HeaderVersion) != i.assetVersion && !i.isPrecognitionRequest(c) {
 			c.Set(HeaderLocation, buildInertiaLocation(i.baseURLParsed, c.OriginalURL()))
-			return c.SendStatus(fiber.StatusConflict)
+			err := c.SendStatus(fiber.StatusConflict)
+			return i.redirectCheck(c, err)
 		}
 
 		// Process the request

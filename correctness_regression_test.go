@@ -168,3 +168,23 @@ func TestExplicitSessionOwnership(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 4, sess.released)
 }
+
+func TestDirectHTMLVaryAndConflictNoCache(t *testing.T) {
+	t.Parallel()
+	i := New("https://app.example", WithFS(views.Templates), WithAssetVersion("v1"))
+	c := fibert.Default()
+	require.NoError(t, i.Render(c, "Page", nil))
+	require.Contains(t, string(c.Response().Header.Peek("Vary")), HeaderInertia)
+	app := fiber.New()
+	app.Use(i.Middleware())
+	app.Get("/", func(c fiber.Ctx) error { return c.SendString("never") })
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	req.Header.Set(HeaderInertia, "true")
+	req.Header.Set(HeaderVersion, "old")
+	req.Header.Set("Cache-Control", "no-cache")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
+	require.Equal(t, "no-cache", resp.Header.Get("Cache-Control"))
+}
