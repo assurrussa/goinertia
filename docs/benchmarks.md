@@ -162,7 +162,7 @@ Final medians, **ns/op / B/op / allocs/op**:
 | SSR-retry/props=10/lazy=0 | 10409 / 14078 / 172 | 10050 / 13440 / 161 | 10086 / 13490 / 162 | 9928 / 13858 / 167 |
 | SSR-cancel/props=10/lazy=0 | 3094 / 4379 / 60 | 2810 / 3750 / 49 | 2843 / 3798 / 50 | 2546 / 4130 / 52 |
 
-The [current complete matrix](benchmark-results.csv) covers all 32 scenarios.
+The [protocol-audit matrix](benchmark-results.csv) covers all 32 scenarios.
 The root facade has no statistically significant time regression in that
 matrix; its empty JSON timing is unresolved (p=0.135). Native Fiber has one
 short-run signal: empty parallel JSON +3.09% (p=0.016). A focused five-round,
@@ -216,3 +216,41 @@ item. These experiments do not prove it is an unavoidable correctness cost.
 Further tuning is separate from the mandatory cache-key/source-compatibility
 fixes. Measurements at 009f3a7 are historical evidence, not measurements of the
 subsequent wire-serialization/cache-key changes.
+
+
+## Correctness/source-compatibility checkpoint 56afa04
+
+The unchanged harness was rerun for five alternating old/new 200ms rounds
+across all 32 cases, using the same Go 1.26.7 and GOMAXPROCS=4. No concurrent Go
+checks ran. CPU idle was 83–86% before and 70–76% in the during-run sample.
+The complete [rereview matrix](benchmark-rereview-results.csv) records medians.
+
+| Scenario | Old Fiber ns / B / allocs | New facade ns / B / allocs | Native Fiber ns / B / allocs | Native HTTP ns / B / allocs |
+|---|---:|---:|---:|---:|
+| JSON/props=0/lazy=0 | 1284 / 1289 / 23 | 1300 / 1221 / 14 | 1287 / 1269 / 15 | 985 / 1721 / 19 |
+| JSON/props=10/lazy=0 | 2552 / 2731 / 30 | 2223 / 1998 / 17 | 2244 / 2046 / 18 | 1940 / 2499 / 22 |
+| JSON/props=100/lazy=10 | 17918 / 20240 / 48 | 14071 / 13393 / 28 | 14260 / 13451 / 29 | 13806 / 13661 / 33 |
+| JSON/props=100/lazy=10/parallel | 7895 / 20290 / 48 | 5678 / 13426 / 28 | 5773 / 13482 / 29 | 5783 / 13690 / 33 |
+| HTML/props=10/lazy=0 | 8205 / 11788 / 129 | 7838 / 11158 / 118 | 7923 / 11206 / 119 | 7673 / 11586 / 124 |
+| HTML/props=100/lazy=10 | 29059 / 42163 / 148 | 25108 / 35377 / 130 | 25090 / 35432 / 131 | 25071 / 34743 / 136 |
+| flash/props=10/lazy=0 | 879 / 1545 / 19 | 705 / 1297 / 9 | 718 / 1297 / 9 | 1159 / 2392 / 22 |
+| SSR-cache/props=10/lazy=0 | 9751 / 13033 / 156 | 9575 / 12403 / 145 | 9521 / 12450 / 146 | 9261 / 12813 / 151 |
+| SSR-retry/props=10/lazy=0 | 10928 / 14077 / 172 | 10572 / 13445 / 161 | 10596 / 13489 / 162 | 10361 / 13858 / 167 |
+| SSR-cancel/props=10/lazy=0 | 3243 / 4379 / 60 | 2877 / 3750 / 49 | 2931 / 3798 / 50 | 2646 / 4130 / 52 |
+
+In this short series, sequential empty native JSON is unresolved (p=0.841),
+while empty parallel JSON is +5.27% for native Fiber (p=0.008) and +2.48% for the
+facade (p=0.032). These are benchstat mean deltas; table entries are medians.
+The new matrix does not remove the earlier focused sequential +3.424% finding
+or automatically close performance acceptance. Most nonempty JSON and large
+HTML cases improve relative to the corrected old baseline; small HTML/lazy
+cases are noisy and often unresolved. No further tuning was added.
+
+Distinct lazy cache keys include source and nesting identity, increasing the
+cache's key storage. At 100 props/10 lazy, native JSON is 13451 B/29 allocations
+versus roughly 13251 B/29 at 009f3a7. This is required correctness storage, not
+isolated adapter overhead. The owned metadata copy fixture is 493 ns/168 B/14
+allocations. Nested callback container copying is not measured by these flat
+props, and HTTP flash has no old native HTTP baseline. All historical raw
+series and the wider focused evidence remain separate; no zero-loss, browser
+E2E or production/network throughput guarantee is made.
