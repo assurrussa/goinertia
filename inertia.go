@@ -1060,10 +1060,6 @@ func (i *Inertia) renderHTMLError(c fiber.Ctx, appErr *Error, details string) er
 }
 
 func (i *Inertia) createRootTemplate() (*template.Template, error) {
-	if i.parsedTemplate != nil {
-		return i.parsedTemplate, nil
-	}
-
 	parse := func() (*template.Template, error) {
 		ts := template.New(filepath.Base(i.rootTemplate)).Funcs(i.sharedFuncMap)
 
@@ -1093,10 +1089,6 @@ func (i *Inertia) createRootTemplate() (*template.Template, error) {
 }
 
 func (i *Inertia) createRootErrorTemplate() (*template.Template, error) {
-	if i.parsedErrorTemplate != nil {
-		return i.parsedErrorTemplate, nil
-	}
-
 	parse := func() (*template.Template, error) {
 		ts := template.New(filepath.Base(i.rootErrorTemplate)).Funcs(i.sharedFuncMap)
 
@@ -1273,12 +1265,15 @@ func (i *Inertia) applyErrorBag(c fiber.Ctx, page *PageDTO) {
 
 func (i *Inertia) isExternalRedirect(target string) bool {
 	parsed, err := url.Parse(target)
-	if err != nil || !parsed.IsAbs() {
+	if err != nil || (parsed.Scheme == "" && parsed.Host == "") {
 		return false
 	}
 	base, err := url.Parse(i.baseURL)
 	if err != nil || base.Scheme == "" || base.Host == "" {
 		return true
+	}
+	if parsed.Scheme == "" {
+		parsed.Scheme = base.Scheme
 	}
 	return !strings.EqualFold(base.Scheme, parsed.Scheme) || !strings.EqualFold(base.Host, parsed.Host)
 }

@@ -1,15 +1,17 @@
 package goinertia
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	fiberclient "github.com/gofiber/fiber/v3/client"
 )
 
 const (
@@ -35,26 +37,28 @@ type SSRConfig struct {
 }
 
 type defaultSSRClient struct {
-	client *fiberclient.Client
+	client *http.Client
 }
 
 func (c *defaultSSRClient) Reset() {
-	c.client.Reset()
+	c.client.CloseIdleConnections()
 }
 
 func (c *defaultSSRClient) Post(ctx context.Context, url string, body []byte, headers map[string]string) (int, []byte, error) {
-	reqCfg := fiberclient.Config{
-		Ctx:    ctx,
-		Body:   body,
-		Header: headers,
-	}
-	resp, err := c.client.Post(url, reqCfg)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return 0, nil, err
 	}
-	defer resp.Close()
-
-	return resp.StatusCode(), resp.Body(), nil
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	owned, err := io.ReadAll(resp.Body)
+	return resp.StatusCode, owned, err
 }
 
 func (i *Inertia) IsSSREnabled() bool {
@@ -71,7 +75,7 @@ func (i *Inertia) EnableSSR(cfg SSRConfig) {
 	if i.ssrConfig.SSRClient != nil {
 		i.ssrClient = i.ssrConfig.SSRClient
 	} else if i.ssrClient == nil {
-		i.ssrClient = &defaultSSRClient{client: fiberclient.New()}
+		i.ssrClient = &defaultSSRClient{client: &http.Client{}}
 	}
 
 	i.initSSRCache()
@@ -147,9 +151,6 @@ func (i *Inertia) processSSR(c fiber.Ctx, page *PageDTO) (*SsrDTO, error) {
 			break
 		}
 		if attempt < maxRetries {
-			if i.ssrClient != nil {
-				i.ssrClient.Reset()
-			}
 			i.logger.WarnContext(
 				c, "SSR retrying request",
 				"attempt", attempt+1,
