@@ -48,7 +48,7 @@ wrappers must expose Unwrap so error handling can observe commitment.
 
 Fiber prop/flash helpers defer full metadata capture until rendering or explicit
 State access. Reading props does not create an empty props map. A State already
-requested by a native consumer is synchronized when helpers mutate its Locals.
+requested by a native consumer is reused by helpers and synchronized to Locals.
 
 Headers, 302/301 to 303 normalization, and redirect flash writes happen before
 the first final `WriteHeader`. Flash hooks can set cookies at that point.
@@ -89,6 +89,10 @@ Repeated `State(c)` access and rendering refresh the state's lifecycle context
 from `c.Context()`, so downstream `c.SetContext` values, deadlines and
 cancellation take effect even when earlier middleware already obtained state.
 The legacy facade still passes the actual `fiber.Ctx` to lazy callbacks.
+Fiber convenience helpers mutate an already installed native `State`, preserving
+props, view data and page metadata added through the embedded core API. Flash,
+old input and validation errors added through that API also persist on redirects
+and Inertia location conflicts, with the same consume-once session policy.
 
 ## Fiber session ownership
 

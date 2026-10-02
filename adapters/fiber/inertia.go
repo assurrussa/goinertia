@@ -161,6 +161,17 @@ func (i *Inertia) readViewData(c fiber.Ctx, s *core.State) {
 	}
 }
 
+// Reuse native state when it is installed. Legacy helper-only requests keep
+// their lightweight Locals path without capturing metadata or context.
+func (i *Inertia) mutationState(c fiber.Ctx, local *core.State) *core.State {
+	if s, ok := c.Locals(stateKey{}).(*core.State); ok {
+		i.readLocalState(c, s)
+		return s
+	}
+	i.readLocalState(c, local)
+	return local
+}
+
 func (i *Inertia) syncState(c fiber.Ctx, s *core.State) {
 	if meta := s.LegacyPageMeta(); meta != nil {
 		c.Locals(ContextKeyPageMeta, meta)
@@ -170,9 +181,6 @@ func (i *Inertia) syncState(c fiber.Ctx, s *core.State) {
 	}
 	if s.ViewData != nil {
 		c.Locals(ContextKeyViewData, s.ViewData)
-	}
-	if saved, ok := c.Locals(stateKey{}).(*core.State); ok && saved != s {
-		i.readLocalState(c, saved)
 	}
 }
 
@@ -436,22 +444,13 @@ func (i *Inertia) setFlashSessionData(c fiber.Ctx) {
 		return
 	}
 
-	props, _ := c.Locals(ContextKeyProps).(map[string]any)
-	if len(props) == 0 {
+	// Only persist flash-related props that are meant to survive redirects.
+	var local core.State
+	s := i.mutationState(c, &local)
+	if len(s.Props) == 0 {
 		return
 	}
-
-	// Only persist flash-related props that are meant to survive redirects.
-	flashData := make(map[string]any)
-	if data, ok := props[ContextPropsFlash].(map[string]string); ok && len(data) > 0 {
-		flashData[ContextPropsFlash] = data
-	}
-	if data, ok := props[ContextPropsErrors].(map[string]string); ok && len(data) > 0 {
-		flashData[ContextPropsErrors] = data
-	}
-	if data, ok := props[ContextPropsOld].(map[string]any); ok && len(data) > 0 {
-		flashData[ContextPropsOld] = data
-	}
+	flashData := s.FlashToPersist()
 	if len(flashData) == 0 {
 		return
 	}
@@ -478,128 +477,112 @@ func (i *Inertia) renderJSON(c fiber.Ctx, s *core.State, page *PageDTO) error {
 // renderHTML renders the page as HTML template.
 func (i *Inertia) WithProp(c fiber.Ctx, key string, value any) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithProp(s, key, value)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithViewData(c fiber.Ctx, key string, value any) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithViewData(s, key, value)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlashMessages(c fiber.Ctx, flashMessages ...FlashError) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithFlashMessages(s, flashMessages...)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithValidationErrors(c fiber.Ctx, errors ValidationErrors) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithValidationErrors(s, errors)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithErrors(c fiber.Ctx, errors map[string]string) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithErrors(s, errors)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithError(c fiber.Ctx, field string, message string) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithError(s, field, message)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlashSuccess(c fiber.Ctx, message string) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithFlashSuccess(s, message)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlashInfo(c fiber.Ctx, message string) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithFlashInfo(s, message)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlashWarning(c fiber.Ctx, message string) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithFlashWarning(s, message)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlashError(c fiber.Ctx, message string) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithFlashError(s, message)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlashOld(c fiber.Ctx, data map[string]any) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithFlashOld(s, data)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithFlash(c fiber.Ctx, key FlashLevel, message string) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithFlash(s, key, message)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithLazyProp(c fiber.Ctx, key string, fn func(context.Context) (any, error)) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithLazyProp(s, key, fn)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithMatchPropsOn(c fiber.Ctx, props ...string) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithMatchPropsOn(s, props...)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithEncryptHistory(c fiber.Ctx) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithEncryptHistory(s)
 	i.syncState(c, s)
 }
 
 func (i *Inertia) WithClearHistory(c fiber.Ctx) {
 	var local core.State
-	i.readLocalState(c, &local)
-	s := &local
+	s := i.mutationState(c, &local)
 	i.Inertia.WithClearHistory(s)
 	i.syncState(c, s)
 }
