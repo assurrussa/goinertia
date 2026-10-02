@@ -568,6 +568,9 @@ func (i *Inertia) setNilProp(page *PageDTO, key string, partial *partialConfig) 
 }
 
 func (i *Inertia) applyOnceProp(page *PageDTO, key string, op OnceProp, partial *partialConfig) (any, bool) {
+	if !i.shouldIncludeProp(key, partial) {
+		return nil, true
+	}
 	onceKey := op.Key
 	if onceKey == "" {
 		onceKey = key
@@ -605,8 +608,10 @@ func (i *Inertia) handleWrappedProp(c *State, page *PageDTO, key string, value a
 }
 
 func (i *Inertia) handleDeferredProp(c *State, page *PageDTO, key string, prop DeferredProp, partial *partialConfig) bool {
-	if partial != nil && partial.explicitlyIncluded(key) {
-		i.setPropValue(c, page, key, prop.Value, partial)
+	if partial != nil && partial.isPartial {
+		if partial.shouldIncludeProp(key) {
+			i.setPropValue(c, page, key, prop.Value, partial)
+		}
 		return true
 	}
 
@@ -622,7 +627,7 @@ func (i *Inertia) handleDeferredProp(c *State, page *PageDTO, key string, prop D
 }
 
 func (i *Inertia) handleOptionalProp(c *State, page *PageDTO, key string, prop OptionalProp, partial *partialConfig) bool {
-	if partial == nil || !partial.explicitlyIncluded(key) {
+	if partial == nil || !partial.isPartial || !partial.shouldIncludeProp(key) {
 		return true
 	}
 	i.setPropValue(c, page, key, prop.Value, partial)
@@ -641,6 +646,13 @@ func (i *Inertia) handleAlwaysProp(c *State, page *PageDTO, key string, prop Alw
 }
 
 func (i *Inertia) handleMergeProp(c *State, page *PageDTO, key string, prop MergeProp, partial *partialConfig) bool {
+	if !i.shouldIncludeProp(key, partial) {
+		return true
+	}
+	i.setPropValue(c, page, key, prop.Value, partial)
+	if _, resolved := page.Props[key]; !resolved {
+		return true
+	}
 	if partial == nil || !partial.isReset(key) {
 		switch {
 		case prop.Prepend:
@@ -651,31 +663,39 @@ func (i *Inertia) handleMergeProp(c *State, page *PageDTO, key string, prop Merg
 			page.MergeProps = appendUnique(page.MergeProps, key)
 		}
 	}
-	if !i.shouldIncludeProp(key, partial) {
-		return true
-	}
-	i.setPropValue(c, page, key, prop.Value, partial)
 	return true
 }
 
 func (i *Inertia) handleScrollProp(c *State, page *PageDTO, key string, prop ScrollProp, partial *partialConfig) bool {
-	if page.ScrollProps == nil {
-		page.ScrollProps = make(map[string]ScrollPropConfig)
-	}
-	page.ScrollProps[key] = prop.Config
-
-	if partial == nil || !partial.isReset(key) {
-		if partial != nil && partial.scrollMergeIntent == "prepend" {
-			page.PrependProps = appendUnique(page.PrependProps, key)
-		} else {
-			page.MergeProps = appendUnique(page.MergeProps, key)
-		}
-	}
-
 	if !i.shouldIncludeProp(key, partial) {
 		return true
 	}
 	i.setPropValue(c, page, key, prop.Value, partial)
+	if _, resolved := page.Props[key]; !resolved {
+		return true
+	}
+	if page.ScrollProps == nil {
+		page.ScrollProps = make(map[string]ScrollPropConfig)
+	}
+	cfg := prop.Config
+	cfg.Reset = partial != nil && partial.isReset(key)
+	page.ScrollProps[key] = cfg
+
+	if cfg.Reset {
+		return true
+	}
+	mergePath := key
+	if paginator, ok := page.Props[key].(map[string]any); ok {
+		if _, hasData := paginator["data"]; hasData {
+			mergePath += ".data"
+		}
+	}
+	if partial != nil && partial.scrollMergeIntent == "prepend" {
+		page.PrependProps = appendUnique(page.PrependProps, mergePath)
+	} else {
+		page.MergeProps = appendUnique(page.MergeProps, mergePath)
+	}
+
 	return true
 }
 
@@ -842,9 +862,22 @@ func (i *Inertia) cacheLazy(c *State, key string, lazy LazyProp) (any, error) {
 func (i *Inertia) resolvePropValue(c *State, key string, value any) (any, error) {
 	switch val := value.(type) {
 	case LazyProp:
-		return i.cacheLazy(c, key, val)
+		result, err := i.cacheLazy(c, key, val)
+		if err != nil {
+			return nil, err
+		}
+		resolved, _, err := i.resolveContainer(c, key, result, 0)
+		return resolved, err
 	case func(context.Context) (any, error):
-		return val(c.propContext())
+		result, err := val(c.propContext())
+		if err != nil {
+			return nil, err
+		}
+		resolved, _, err := i.resolveContainer(c, key, result, 0)
+		return resolved, err
+	case map[string]any, []any:
+		resolved, _, err := i.resolveContainer(c, key, val, 0)
+		return resolved, err
 	default:
 		return value, nil
 	}

@@ -24,12 +24,18 @@ type protocolCase struct {
 	action       string
 	status       int
 	check        func(*testing.T, *http.Response, map[string]any)
+	checkPage    func(*testing.T, core.PageDTO)
 }
 
 func protocolProps() map[string]any {
 	return map[string]any{
 		"plain": "value", "deferred": core.Defer("later"), "optional": core.Optional("extra"), "always": core.Always("keep"),
 		"merged": core.Merge([]int{1}), "once": core.Once("first", core.WithOnceKey("once-key")),
+		"prepended": core.Prepend([]int{3}), "deep": core.DeepMerge(map[string]any{"count": 1}),
+		"paginator": core.Scroll(map[string]any{"data": []int{2}}, core.ScrollPropConfig{PageName: "page", CurrentPage: 2}),
+		"nested": map[string]any{"user": core.LazyProp{
+			Fn: func(context.Context) (any, error) { return "Alice", nil },
+		}},
 		"lazy":   core.LazyProp{Key: "lazy", Fn: func(context.Context) (any, error) { return "computed", nil }},
 		"scroll": core.Scroll([]int{2}, core.ScrollPropConfig{PageName: "page", CurrentPage: 1, NextPage: 2}),
 	}
@@ -100,6 +106,107 @@ func TestLegacyAndNeutralCallbackContexts(t *testing.T) {
 
 func protocolFixtures() []protocolCase {
 	return []protocolCase{
+		{
+			name: "paginator-data-path", method: "GET", status: http.StatusOK,
+			headers: map[string]string{core.HeaderPartialComponent: "Test", core.HeaderPartialOnly: "paginator"},
+			checkPage: func(t *testing.T, page core.PageDTO) {
+				t.Helper()
+				require.Equal(t, []string{"paginator.data"}, page.MergeProps)
+				require.Contains(t, page.ScrollProps, "paginator")
+			},
+		},
+		{
+			name: "paginator-prepend-path", method: "GET", status: http.StatusOK,
+			headers: map[string]string{
+				core.HeaderPartialComponent: "Test", core.HeaderPartialOnly: "paginator",
+				core.HeaderInfiniteScrollMergeIntent: "prepend",
+			},
+			checkPage: func(t *testing.T, page core.PageDTO) {
+				t.Helper()
+				require.Equal(t, []string{"paginator.data"}, page.PrependProps)
+				require.Empty(t, page.MergeProps)
+			},
+		},
+		{
+			name: "nested-lazy", method: "GET", status: http.StatusOK,
+			checkPage: func(t *testing.T, page core.PageDTO) {
+				t.Helper()
+				nested, ok := page.Props["nested"].(map[string]any)
+				require.True(t, ok)
+				require.Equal(t, "Alice", nested["user"])
+			},
+		},
+		{
+			name: "partial-metadata-selection", method: "GET", status: http.StatusOK,
+			headers: map[string]string{core.HeaderPartialComponent: "Test", core.HeaderPartialOnly: "plain"},
+			checkPage: func(t *testing.T, page core.PageDTO) {
+				t.Helper()
+				require.Empty(t, page.DeferredProps)
+				require.Empty(t, page.MergeProps)
+				require.Empty(t, page.PrependProps)
+				require.Empty(t, page.DeepMergeProps)
+				require.Empty(t, page.ScrollProps)
+				require.Empty(t, page.OnceProps)
+			},
+		},
+		{
+			name: "except-metadata-selection", method: "GET", status: http.StatusOK,
+			headers: map[string]string{
+				core.HeaderPartialComponent: "Test", core.HeaderPartialExcept: "merged,prepended,deep,scroll,paginator,once",
+			},
+			checkPage: func(t *testing.T, page core.PageDTO) {
+				t.Helper()
+				require.Empty(t, page.DeferredProps)
+				require.Empty(t, page.MergeProps)
+				require.Empty(t, page.PrependProps)
+				require.Empty(t, page.DeepMergeProps)
+				require.Empty(t, page.ScrollProps)
+				require.Empty(t, page.OnceProps)
+			},
+		},
+		{
+			name: "reset-metadata", method: "GET", status: http.StatusOK,
+			headers: map[string]string{
+				core.HeaderPartialComponent: "Test",
+				core.HeaderPartialOnly:      "merged,prepended,deep,scroll",
+				core.HeaderReset:            "merged,prepended,deep,scroll",
+			},
+			checkPage: func(t *testing.T, page core.PageDTO) {
+				t.Helper()
+				require.Empty(t, page.MergeProps)
+				require.Empty(t, page.PrependProps)
+				require.Empty(t, page.DeepMergeProps)
+				require.Contains(t, page.ScrollProps, "scroll")
+				require.True(t, page.ScrollProps["scroll"].Reset)
+				for _, key := range []string{"merged", "prepended", "deep", "scroll"} {
+					require.Contains(t, page.Props, key)
+				}
+			},
+		},
+		{
+			name: "once-partial-refresh", method: "GET", status: http.StatusOK,
+			headers: map[string]string{
+				core.HeaderPartialComponent: "Test",
+				core.HeaderPartialOnly:      "once",
+				core.HeaderExceptOnceProps:  "once-key",
+			},
+			checkPage: func(t *testing.T, page core.PageDTO) {
+				t.Helper()
+				require.Equal(t, "first", page.Props["once"])
+				require.Equal(t, "once", page.OnceProps["once-key"].Prop)
+			},
+		},
+		{
+			name: "partial-component-mismatch", method: "GET", status: http.StatusOK,
+			headers: map[string]string{core.HeaderPartialComponent: "Other", core.HeaderPartialOnly: "plain"},
+			checkPage: func(t *testing.T, page core.PageDTO) {
+				t.Helper()
+				require.Contains(t, page.Props, "merged")
+				require.Contains(t, page.MergeProps, "merged")
+				require.Contains(t, page.DeferredProps["default"], "deferred")
+				require.NotContains(t, page.Props, "deferred")
+			},
+		},
 		{
 			name: "whitespace-precognition", method: "GET", status: http.StatusConflict,
 			headers: map[string]string{core.HeaderPrecognition: " ", core.HeaderVersion: "old"},
@@ -174,6 +281,8 @@ func protocolFixtures() []protocolCase {
 				t.Helper()
 				require.NotContains(t, p, "plain")
 				require.Contains(t, p, "always")
+				require.Equal(t, "later", p["deferred"])
+				require.Equal(t, "extra", p["optional"])
 			},
 		},
 		{
@@ -324,13 +433,16 @@ func runProtocolFixture(t *testing.T, adapter string, fixture protocolCase) {
 	require.Equal(t, fixture.status, resp.StatusCode)
 	require.Contains(t, resp.Header.Get("Vary"), core.HeaderInertia)
 	props := map[string]any{}
+	var page core.PageDTO
 	if strings.Contains(resp.Header.Get("Content-Type"), "application/json") && fixture.action != "validation" {
-		var page core.PageDTO
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&page))
 		props = page.Props
 	}
 	if fixture.check != nil {
 		fixture.check(t, resp, props)
+	}
+	if fixture.checkPage != nil {
+		fixture.checkPage(t, page)
 	}
 }
 

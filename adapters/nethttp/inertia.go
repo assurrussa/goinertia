@@ -143,6 +143,14 @@ func RequestMeta(r *http.Request) core.RequestMeta {
 // outside this adapter's Middleware, so hosts can detect missing wiring.
 func State(r *http.Request) *core.State {
 	s, _ := r.Context().Value(stateKey{}).(*core.State)
+	if s != nil {
+		// Downstream middleware may derive authentication/deadline context.
+		// Bind callbacks and SSR to the request actually passed by the handler.
+		s.Context = r.Context()
+		if ref, ok := r.Context().Value(requestKey{}).(*requestRef); ok {
+			ref.request = r
+		}
+	}
 	return s
 }
 
@@ -159,18 +167,19 @@ func (i *Inertia) Middleware(next http.Handler) http.Handler {
 		writer := &responseWriter{
 			ResponseWriter: w,
 			before: func(status int) int { //nolint:contextcheck // Closure owns the native request context.
+				active := ref.request
 				h := w.Header()
-				h.Set("Vary", core.VaryValue(h.Get("Vary"), core.HeaderInertia))
+				appendVary(h, core.HeaderInertia)
 				if i.PrecognitionVary() {
-					h.Set("Vary", core.VaryValue(h.Get("Vary"), core.HeaderPrecognition))
+					appendVary(h, core.HeaderPrecognition)
 				}
 				if (s.Meta.Inertia != "" || s.Meta.Precognition != "") && strings.Contains(strings.ToLower(s.Meta.CacheControl), "no-cache") {
 					h.Set("Cache-Control", "no-cache")
 				}
 				if i.sessionStore != nil && s.Meta.Precognition == "" && core.IsFlashResponse(status, h.Get(core.HeaderLocation)) {
 					if data := s.FlashToPersist(); len(data) > 0 {
-						if err := i.sessionStore.Flash(w, r, string(core.ContextKeyProps), data); err != nil {
-							i.logger.ErrorContext(r.Context(), "could not set flash session props", "error", err)
+						if err := i.sessionStore.Flash(w, active, string(core.ContextKeyProps), data); err != nil {
+							i.logger.ErrorContext(active.Context(), "could not set flash session props", "error", err)
 						}
 					}
 				}
@@ -251,7 +260,7 @@ func (i *Inertia) Render(w http.ResponseWriter, r *http.Request, component strin
 }
 
 func (i *Inertia) renderPrecognition(w http.ResponseWriter, errs core.ValidationErrors) error {
-	w.Header().Set("Vary", core.VaryValue(w.Header().Get("Vary"), core.HeaderPrecognition))
+	appendVary(w.Header(), core.HeaderPrecognition)
 	w.Header().Set(core.HeaderPrecognition, "true")
 	if len(errs) == 0 {
 		w.Header().Set(core.HeaderPrecognitionSuccess, "true")
@@ -270,6 +279,7 @@ func (i *Inertia) renderPrecognition(w http.ResponseWriter, errs core.Validation
 
 // Redirect applies native Inertia external/internal redirect policy.
 func (i *Inertia) Redirect(w http.ResponseWriter, r *http.Request, target string) error {
+	State(r)
 	if target == "" || target == "/" {
 		target = RequestMeta(r).BaseURL
 	}
@@ -282,6 +292,7 @@ func (i *Inertia) Redirect(w http.ResponseWriter, r *http.Request, target string
 
 // RedirectExternal forces an Inertia location visit.
 func (i *Inertia) RedirectExternal(w http.ResponseWriter, r *http.Request, target string) error {
+	State(r)
 	if target == "" || target == "/" {
 		target = RequestMeta(r).BaseURL
 	}
@@ -325,7 +336,7 @@ func (i *Inertia) HandleError(w http.ResponseWriter, r *http.Request, err error)
 			_ = i.renderPrecognition(w, errs)
 			return
 		}
-		w.Header().Set("Vary", core.VaryValue(w.Header().Get("Vary"), core.HeaderPrecognition))
+		appendVary(w.Header(), core.HeaderPrecognition)
 		w.Header().Set(core.HeaderPrecognition, "true")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(appErr.Code)

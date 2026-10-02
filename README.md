@@ -9,8 +9,9 @@
 
 `goinertia` allows you to build modern single-page apps
 using [Vue.js](https://vuejs.org/), [React](https://reactjs.org/), or [Svelte](https://svelte.dev/) while keeping
-routing and controllers in your [Go (Fiber)](https://gofiber.io/) backend. It strictly adheres to
-the [Inertia.js protocol](https://inertiajs.com/the-protocol).
+routing and controllers in your Go backend. The compatible API targets an Inertia v2.x
+protocol subset. See the [coverage matrix and v3 roadmap](docs/protocol-coverage.md)
+for supported behavior, compatibility differences and remaining work.
 
 Visit:
 
@@ -20,11 +21,11 @@ Visit:
 ## Features
 
 - **⚡️ Native adapters**: Fiber v3 and net/http lifecycles, with compatible Fiber root imports.
-- **🔄 Full Protocol Support**: Implements the complete Inertia.js spec.
+- **🔄 Inertia protocol features**: Shared rendering policy across both native adapters.
     - **Asset Versioning**: Auto-reloads assets when versions change.
     - **Partial Reloads**: Only fetch the data you need.
     - **Lazy / Deferred / Once**: Compute expensive props only when requested.
-    - **Merge & Scroll Props**: Built-in support for v2 merge and infinite scroll metadata.
+    - **Merge & Scroll Props**: Root merge and basic scroll metadata, with documented limits.
     - **Shared Data**: Global props (like "auth.user") available to all pages.
 - **🛡️ Validation & Flash**: Built-in helpers for form validation errors and flash messages.
 - **🚀 Server-Side Rendering (SSR)**: Native support for rendering initial HTML on the server.

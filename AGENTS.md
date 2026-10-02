@@ -3,10 +3,15 @@
 ## Project Contract
 
 `goinertia` is a reusable Go module at `github.com/assurrussa/goinertia`.
-It is a Fiber v3 adapter for Inertia.js applications, with support for
+It has a neutral protocol/rendering core, native Fiber v3 and net/http adapters,
+and compatible Fiber root imports, with support for
 Inertia protocol headers, page rendering, partial reloads, lazy/deferred/once
 props, merge and scroll metadata, flash and validation helpers, CSRF hooks,
 error handling, and optional SSR.
+
+The architecture decision retains both native lifecycles. The wire contract is
+a documented Inertia v2.x subset; current official documentation targets v3.
+Consult `docs/protocol-coverage.md` before claiming complete protocol support.
 
 Treat this repository as a library, not an application host. Keep public API
 changes small, documented, and covered by tests because downstream Fiber
@@ -42,7 +47,10 @@ and contract-focused; do not copy full local README sections into wiki.
 
 ## Repository Layout
 
-- Root package: production `goinertia` API and protocol behavior.
+- Root package: compatible Fiber `goinertia` API.
+- `core/`: framework-neutral protocol, props, templates/assets and SSR policy.
+- `adapters/fiber`, `adapters/nethttp`: native lifecycle, session/CSRF and response policy.
+- `integration/nethttp-consumer`: separate public HTTP consumer module; explicit vet/build/race gates.
 - `inertiat/`: reusable test helpers for Fiber/Inertia requests and mock
   session support.
 - `views/`, `public/`, and `testdata/`: embedded defaults and test fixtures.
@@ -60,6 +68,9 @@ and contract-focused; do not copy full local README sections into wiki.
 - Benchmarks: `make bench-all`
 - Generate mocks: `go generate ./...`
 - Full local gate: `make check`
+- Native HTTP consumer: run `go vet ./...`, `go build ./...` and
+  `go test -race -count=5 ./...` in `integration/nethttp-consumer`; inspect
+  `go list -deps -test ./...` for any Fiber/fasthttp package.
 
 `make check` runs tidy, generate, formatting, vet, lint, tests, race tests,
 and HTML coverage. It expects local tools such as `gofumpt`, `gci`, and

@@ -13,6 +13,13 @@ client-side page components.
 The module path is `github.com/assurrussa/goinertia`. The current Go module
 targets Go `1.26` and Fiber `v3.3.0`.
 
+The architecture decision retains the neutral core and both native lifecycles.
+The compatible wire contract is a documented Inertia v2.x subset; current
+official documentation targets v3. Read [protocol coverage](protocol-coverage.md)
+before claiming full protocol/client compatibility. The separate
+`integration/nethttp-consumer` module validates the public HTTP API and its compiled
+dependency graph without root/Fiber imports; run its gates explicitly.
+
 ## Public Surface
 
 The root package provides the production API:

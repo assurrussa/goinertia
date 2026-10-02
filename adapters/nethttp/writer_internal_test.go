@@ -147,6 +147,118 @@ func (w plainWriter) Header() http.Header         { return w.w.Header() }
 func (w plainWriter) Write(b []byte) (int, error) { return w.w.Write(b) }
 func (w plainWriter) WriteHeader(code int)        { w.w.WriteHeader(code) }
 
+type transparentWriter struct{ http.ResponseWriter }
+
+func (w transparentWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func TestHTTPErrorThroughTransparentWriter(t *testing.T) {
+	t.Parallel()
+	i := New("https://app.example", WithCoreOptions(core.WithFS(views.Templates)))
+	h := i.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wrapped := transparentWriter{transparentWriter{w}}
+		i.Handler(func(w http.ResponseWriter, _ *http.Request) error {
+			_, err := io.WriteString(w, "already")
+			assert.NoError(t, err)
+			return errors.New("stream failed")
+		}).ServeHTTP(wrapped, r)
+	}))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "already", w.Body.String())
+}
+
+type derivedContextKey struct{}
+
+type inspectSSRContext struct{ inspect func(context.Context) }
+
+func (*inspectSSRContext) Reset() {}
+func (s *inspectSSRContext) Post(ctx context.Context, _ string, _ []byte, _ map[string]string) (int, []byte, error) {
+	s.inspect(ctx)
+	return 0, nil, ctx.Err()
+}
+
+func TestHTTPDownstreamContextReachesCallbacksAndSSR(t *testing.T) {
+	t.Parallel()
+	for _, inertiaRequest := range []bool{true, false} {
+		t.Run(map[bool]string{true: "lazy", false: "ssr"}[inertiaRequest], func(t *testing.T) {
+			t.Parallel()
+			called := false
+			var active *http.Request
+			inspect := func(ctx context.Context) {
+				called = true
+				assert.Equal(t, "authenticated", ctx.Value(derivedContextKey{}))
+				require.ErrorIs(t, ctx.Err(), context.Canceled)
+				request, ok := Request(ctx)
+				assert.True(t, ok)
+				assert.Same(t, active, request)
+			}
+			i := New("https://app.example", WithCoreOptions(core.WithFS(views.Templates),
+				core.WithSSRConfig(core.SSRConfig{
+					URL: "http://fixture.invalid", DisableRetries: true,
+					SSRClient: &inspectSSRContext{inspect: inspect},
+				})))
+			h := i.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ctx, cancel := context.WithCancel(context.WithValue(r.Context(), derivedContextKey{}, "authenticated"))
+				defer cancel()
+				cancel()
+				active = r.WithContext(ctx)
+				err := i.Render(w, active, "Page", map[string]any{
+					"user": core.LazyProp{Fn: func(ctx context.Context) (any, error) {
+						if inertiaRequest {
+							inspect(ctx)
+						}
+						return "Alice", nil
+					}},
+				})
+				if inertiaRequest {
+					assert.NoError(t, err)
+				} else {
+					assert.ErrorIs(t, err, context.Canceled)
+				}
+			}))
+			r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+			if inertiaRequest {
+				r.Header.Set(core.HeaderInertia, "true")
+			}
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			require.True(t, called)
+			if !inertiaRequest {
+				require.Empty(t, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestHTTPVaryPreservesMultipleFieldLines(t *testing.T) {
+	t.Parallel()
+	for _, values := range [][]string{
+		{"Accept-Encoding", "Accept-Language"},
+		{"Accept-Encoding", "x-inertia, Precognition"},
+		{"Accept-Encoding", "*"},
+	} {
+		i := New("https://app.example")
+		h := i.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			for _, value := range values {
+				w.Header().Add("Vary", value)
+			}
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
+		got := w.Result()
+		_ = got.Body.Close()
+		require.Equal(t, values, got.Header.Values("Vary")[:len(values)])
+		combined := strings.Join(got.Header.Values("Vary"), ",")
+		require.True(t, core.HasVaryToken(combined, core.HeaderInertia))
+		require.True(t, core.HasVaryToken(combined, core.HeaderPrecognition))
+		if values[1] == "*" || values[1] == "x-inertia, Precognition" {
+			require.Equal(t, values, got.Header.Values("Vary"))
+		}
+	}
+}
+
 func TestHTTPSSRServerCancellationAndErrors(t *testing.T) {
 	t.Parallel()
 	started := make(chan struct{}, 1)

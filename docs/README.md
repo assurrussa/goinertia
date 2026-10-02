@@ -18,3 +18,4 @@
 - [Native adapters and compatibility](adapters.md)
 - [Adapter comparison benchmarks](benchmarks.md)
 - [Core and adapter tradeoffs](core-tradeoffs.md)
+- [Protocol coverage and v3 roadmap](protocol-coverage.md)

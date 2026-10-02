@@ -14,9 +14,10 @@ adapters execute this code. Those features are substantial reusable behavior;
 their extraction is more than a common interface around two handlers.
 
 The baseline had approximately 2774 physical Go lines in its production root
-files. The split has approximately 2317 in core, 1223 in Fiber, 606 in HTTP and
-179 in the root facade: roughly 4325 total, including comments and excluding
-tests/generated mocks. This is about 56% more source, not a free abstraction.
+files. The initial split had roughly 4325 production lines. After the protocol audit,
+there are approximately 2421 in core, 1223 in Fiber, 641 in HTTP and 179 in the
+root facade: roughly 4464 total, including comments and excluding tests/generated
+mocks. This is about 61% more source than the original, not a free abstraction.
 Fiber aliases/options and facade forwarding account for part of the increase.
 The HTTP lifecycle includes precommit session cookies and response status,
 streaming, informational responses and optional writer capabilities. These
@@ -45,18 +46,17 @@ Required metadata ownership and SSR body copies remain. No unsafe aliases,
 reflection, universal context or shared State pooling were introduced to recover
 performance. Current numbers and uncertainty are in [benchmarks.md](benchmarks.md).
 
-## Recommendation
+## Accepted direction
 
-Keep a small neutral protocol/rendering core if native HTTP support has an
-actual consumer or a concrete near-term use. The shared behavior above and
-independent compiled HTTP graph justify that boundary, provided both lifecycles
-receive maintenance and the measured performance budget is accepted.
+The product decision is to keep the neutral core and maintain a complete native
+HTTP lifecycle alongside Fiber. Broader Inertia support is a planned use for
+the shared protocol implementation. The architecture decision is settled;
+individual protocol features still need the evidence and acceptance gates in
+[protocol-coverage.md](protocol-coverage.md).
 
-If all supported hosts remain Fiber/GoAdmin and HTTP has no planned consumer,
-prefer Fiber-only for the public product, or retain only narrow neutral DTO,
-prop, template and SSR pieces. Maintaining the second lifecycle just for a
-future claim of universality adds source and tests without current user value.
-Leaving this as a draft is reasonable until that product decision is made.
+Both lifecycles require maintenance, and the additional source/tests and
+measured performance budget remain real costs. Draft status reflects review
+and feature coverage, rather than a pending choice of architecture.
 
 Performance improvement alone does not prove the split is the better design:
 the Vary/map optimizations could also be applied to a Fiber-only implementation.

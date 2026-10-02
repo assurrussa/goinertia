@@ -5,7 +5,24 @@ import (
 	"io"
 	"net"
 	"net/http"
+
+	"github.com/assurrussa/goinertia/core"
 )
+
+// appendVary preserves every field line, including wildcard and existing tokens.
+func appendVary(h http.Header, token string) {
+	values := h.Values("Vary")
+	for _, value := range values {
+		if core.HasVaryToken(value, token) {
+			return
+		}
+	}
+	if len(values) <= 1 {
+		h.Set("Vary", core.VaryValue(h.Get("Vary"), token))
+		return
+	}
+	h.Add("Vary", token)
+}
 
 type responseWriter struct {
 	http.ResponseWriter
@@ -107,8 +124,15 @@ func (w pushWriter) Push(target string, opts *http.PushOptions) error {
 }
 
 func committed(w http.ResponseWriter) bool {
-	if value, ok := w.(interface{ isCommitted() bool }); ok {
-		return value.isCommitted()
+	for w != nil {
+		if value, ok := w.(interface{ isCommitted() bool }); ok {
+			return value.isCommitted()
+		}
+		unwrapper, ok := w.(interface{ Unwrap() http.ResponseWriter })
+		if !ok {
+			return false
+		}
+		w = unwrapper.Unwrap()
 	}
 	return false
 }

@@ -33,7 +33,11 @@ return inertia.Render(c, "Dashboard", map[string]any{
 
 ## Optional props
 
-Optional props are only included when explicitly requested.
+Optional props are omitted on full visits and resolved on a matching partial
+reload when selected by only or not excluded by except. Deferred props follow
+the same selection policy; partial responses do not announce deferred groups.
+This corrects the earlier except-only omission. See
+[protocol coverage](protocol-coverage.md) for the complete contract.
 
 ```go
 return inertia.Render(c, "Dashboard", map[string]any{
@@ -71,6 +75,11 @@ return inertia.Render(c, "Users", map[string]any{
 ## Scroll props
 
 Scroll props add pagination metadata for infinite scroll.
+
+Merge, scroll and once metadata are filtered with their selected props. Partial
+responses do not announce new deferred requests. A reset returns the selected
+merge value without an append/prepend/deep label; scroll metadata emits `reset: true`. A map paginator containing a `data`
+member merges that path; a bare array still merges at the root prop.
 
 ```go
 return inertia.Render(c, "Feed", map[string]any{

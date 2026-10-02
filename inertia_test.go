@@ -1671,7 +1671,8 @@ func TestInertia_DeferredOnceProps_PartialFetch(t *testing.T) {
 	_, ok = page.Props["plan"]
 	assert.False(t, ok)
 	_, ok = page.OnceProps["plan_v1"]
-	assert.True(t, ok)
+	// A partial response must not advertise once metadata for an unselected prop.
+	assert.False(t, ok)
 	assert.Empty(t, page.DeferredProps)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&calls))
 }

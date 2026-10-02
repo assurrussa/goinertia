@@ -116,8 +116,7 @@ func WithSharedProps(data map[string]any) Option {
 	}
 }
 
-// WithCanExposeDetails sets a callback to decide if current request may see error details in production.
-// Useful to allow main admins to see full error messages.
+// WithCSRFPropName selects the adapter-supplied token's reserved prop name.
 func WithCSRFPropName(prop string) Option {
 	return func(i *Inertia) {
 		if prop == "" {

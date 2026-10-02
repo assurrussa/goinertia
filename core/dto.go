@@ -29,6 +29,7 @@ type ScrollPropConfig struct {
 	PreviousPage any    `json:"previousPage,omitempty"`
 	NextPage     any    `json:"nextPage,omitempty"`
 	CurrentPage  any    `json:"currentPage,omitempty"`
+	Reset        bool   `json:"reset,omitempty"`
 }
 
 // OncePropConfig defines a once prop configuration.

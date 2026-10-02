@@ -9,6 +9,10 @@ Dependencies flow from the root compatibility facade to `adapters/fiber` and
 then `core`. Native adapters depend on core; core does not import either adapter.
 There is no Fiber/HTTP bridge or universal framework context.
 
+The chosen direction retains both native lifecycles. Protocol coverage is a
+separate contract: consult the [v2 subset and v3 roadmap](protocol-coverage.md)
+before choosing a client version or advanced prop feature.
+
 ## Native net/http
 
 ```go
@@ -37,7 +41,10 @@ handler := manager.Middleware(mux)
 and page metadata belong to that request. `RequestMeta` contains fixed protocol
 fields, without creating a complete request header map. State may be mutated
 by the current handler; it is not safe for concurrent mutation or reuse across
-requests.
+requests. State/Render/redirect helpers bind the downstream request context,
+including values and cancellation added with r.WithContext(r.Context()-derived
+context). Native Request(ctx) returns that active request. Transparent writer
+wrappers must expose Unwrap so error handling can observe commitment.
 
 Fiber prop/flash helpers defer full metadata capture until rendering or explicit
 State access. Reading props does not create an empty props map. A State already

@@ -10,4 +10,4 @@
 - [uploads.md](uploads.md)
 - [validation.md](validation.md)
 - [redirect-409.md](redirect-409.md)
-
+- [Protocol coverage and v3 roadmap](protocol-coverage.md)

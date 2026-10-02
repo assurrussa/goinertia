@@ -81,7 +81,7 @@ No zero-loss claim, network SSR throughput claim or performance acceptance
 threshold is implied. Repeat longer runs on a dedicated host before making
 deployment capacity or performance budget decisions.
 
-## Optimization follow-up
+## Optimization follow-up (e8491e9)
 
 Allocation profiles of the same flash fixture identified eager State/context/
 metadata capture, allocating Vary token splits and unused page-building maps.
@@ -115,8 +115,8 @@ Follow-up medians, **ns/op / B/op / allocs/op**:
 | SSR-retry/props=10/lazy=0 | 10663 / 14075 / 172 | 10132 / 13439 / 161 | 10136 / 13490 / 162 | 9822 / 13856 / 167 |
 | SSR-cancel/props=10/lazy=0 | 3170 / 4379 / 60 | 2835 / 3750 / 49 | 2857 / 3798 / 50 | 2553 / 4130 / 52 |
 
-The [complete current matrix](benchmark-results.csv) includes every lazy/parallel
-case. CPU idle was 81–85% before the final run and 73–84% during the sampled
+The [complete optimization matrix](benchmark-optimized-results.csv) includes every lazy/parallel
+case. CPU idle was 81–85% before that run and 73–84% during the sampled
 window. A few swap-in pages were observed before timing; none in the sampled
 mid-run window. All five series passed status and per-request lazy-count checks.
 
@@ -126,7 +126,7 @@ medians are 1306 → 1333 ns/op, with no resolved timing difference (p=0.310);
 allocations decrease 23 → 14 and bytes 1289 → 1221. Native Fiber empty JSON is
 1264 ns/op, 1269 B/op, 15 allocations. Flash improves from 861 ns/op, 1545 B/op,
 19 allocations to 687/1297/9 for the facade and 698/1297/9 for native Fiber.
-Empty HTML has no resolved timing difference in the final sample. Larger
+Empty HTML has no resolved timing difference in that sample. Larger
 JSON/HTML pages have measurable improvements. The standalone ownership fixture
 measures 481 ns/op, 168 B/op and 14 allocations, with required copies preserved.
 
@@ -134,5 +134,50 @@ Some raw samples still have substantial variance. No resolved regression in a
 short workstation matrix proves neither exact equality nor a universal zero-loss
 guarantee. Native HTTP flash remains costlier than old Fiber (1090 ns/op, 2392
 B/op, 22 allocations versus 861/1545/19), reflecting the native lifecycle and
-fixture differences; it is not hidden behind the Fiber results. Product scope
-and an accepted performance budget remain review decisions.
+fixture differences; it is not hidden behind the Fiber results. The architecture direction now retains both adapters; measured budgets still
+require review.
+
+
+## Protocol audit follow-up
+
+The final audit retains the same corrected old Fiber baseline and unchanged
+common harness. Five old/new series alternate execution order, with Go 1.26.7,
+GOMAXPROCS=4 and 200ms per case on the same Apple M5 Pro. No Go checks run
+concurrently with timing, and no unrelated process is stopped. Sampled CPU idle
+is 90–96% before, 67–74% during and 78–87% after. Some old samples still vary
+substantially; the raw series is retained rather than silently replaced.
+
+Final medians, **ns/op / B/op / allocs/op**:
+
+| Scenario | Old Fiber ns / B / allocs | New facade ns / B / allocs | Native Fiber ns / B / allocs | Native HTTP ns / B / allocs |
+|---|---:|---:|---:|---:|
+| JSON/props=0/lazy=0 | 1261 / 1289 / 23 | 1297 / 1221 / 14 | 1244 / 1269 / 15 | 970 / 1722 / 19 |
+| JSON/props=10/lazy=0 | 2430 / 2731 / 30 | 2130 / 1998 / 17 | 2180 / 2046 / 18 | 1904 / 2499 / 22 |
+| JSON/props=100/lazy=10 | 17398 / 20266 / 48 | 13274 / 13204 / 28 | 13599 / 13251 / 29 | 13199 / 13460 / 33 |
+| JSON/props=100/lazy=10/parallel | 7578 / 20294 / 48 | 5341 / 13232 / 28 | 5392 / 13281 / 29 | 5419 / 13491 / 33 |
+| HTML/props=10/lazy=0 | 7894 / 11787 / 129 | 7462 / 11157 / 118 | 7544 / 11205 / 119 | 7351 / 11586 / 124 |
+| HTML/props=100/lazy=10 | 27893 / 42159 / 148 | 23985 / 35176 / 130 | 24077 / 35246 / 131 | 23667 / 34546 / 136 |
+| flash/props=10/lazy=0 | 848 / 1545 / 19 | 677 / 1297 / 9 | 676 / 1297 / 9 | 1116 / 2392 / 22 |
+| SSR-cache/props=10/lazy=0 | 9381 / 13033 / 156 | 9032 / 12402 / 145 | 9026 / 12450 / 146 | 9005 / 12814 / 151 |
+| SSR-retry/props=10/lazy=0 | 10409 / 14078 / 172 | 10050 / 13440 / 161 | 10086 / 13490 / 162 | 9928 / 13858 / 167 |
+| SSR-cancel/props=10/lazy=0 | 3094 / 4379 / 60 | 2810 / 3750 / 49 | 2843 / 3798 / 50 | 2546 / 4130 / 52 |
+
+The [current complete matrix](benchmark-results.csv) covers all 32 scenarios.
+The root facade has no statistically significant time regression in that
+matrix; its empty JSON timing is unresolved (p=0.135). Native Fiber has one
+short-run signal: empty parallel JSON +3.09% (p=0.016). A focused five-round,
+old/native alternating 1s check does not resolve that parallel difference
+(p=0.151), but does find +3.42% for sequential empty native JSON (p=0.016).
+The focused means are about 1.22 versus 1.26 microseconds; allocations remain
+23 versus 15. These mixed signals on a shared workstation warrant a small
+empty-request cost/uncertainty budget, not a universal no-regression claim.
+The focused series samples 64–82% idle CPU; a few swap-in pages occur in that
+sample. No broad matrix is discarded in favor of the focused result.
+
+Native HTTP flash remains costlier than old Fiber: 1116/2392/22 versus
+848/1545/19. The separate mandatory metadata copy fixture is 483 ns/op,
+168 B/op and 14 allocations and is not subtracted from adapter measurements.
+Nested lazy maps/slices now require copies when callbacks change children;
+this ownership cost is not measured by the flat-prop warm-page matrix and must
+not be called adapter-only overhead. There is no production/network throughput
+or full-protocol performance claim.
