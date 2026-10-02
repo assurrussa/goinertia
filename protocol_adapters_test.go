@@ -36,8 +36,9 @@ func protocolProps() map[string]any {
 		"nested": map[string]any{"user": core.LazyProp{
 			Fn: func(context.Context) (any, error) { return "Alice", nil },
 		}},
-		"lazy":   core.LazyProp{Key: "lazy", Fn: func(context.Context) (any, error) { return "computed", nil }},
-		"scroll": core.Scroll([]int{2}, core.ScrollPropConfig{PageName: "page", CurrentPage: 1, NextPage: 2}),
+		"nested.user": core.LazyProp{Fn: func(context.Context) (any, error) { return "literal", nil }},
+		"lazy":        core.LazyProp{Key: "lazy", Fn: func(context.Context) (any, error) { return "computed", nil }},
+		"scroll":      core.Scroll([]int{2}, core.ScrollPropConfig{PageName: "page", CurrentPage: 1, NextPage: 2}),
 	}
 }
 
@@ -134,6 +135,7 @@ func protocolFixtures() []protocolCase {
 				nested, ok := page.Props["nested"].(map[string]any)
 				require.True(t, ok)
 				require.Equal(t, "Alice", nested["user"])
+				require.Equal(t, "literal", page.Props["nested.user"])
 			},
 		},
 		{
@@ -177,7 +179,7 @@ func protocolFixtures() []protocolCase {
 				require.Empty(t, page.PrependProps)
 				require.Empty(t, page.DeepMergeProps)
 				require.Contains(t, page.ScrollProps, "scroll")
-				require.True(t, page.ScrollProps["scroll"].Reset)
+				// The request-only reset flag is asserted against raw JSON by TestScrollResetWireCompatibility.
 				for _, key := range []string{"merged", "prepended", "deep", "scroll"} {
 					require.Contains(t, page.Props, key)
 				}

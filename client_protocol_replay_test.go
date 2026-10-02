@@ -3,6 +3,7 @@ package goinertia_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,13 +22,13 @@ import (
 )
 
 type replayFixture struct {
-	Adapter  string                  `json:"adapter"`
-	Initial  core.PageDTO            `json:"initial"`
-	Deferred map[string]core.PageDTO `json:"deferred"`
-	Excluded core.PageDTO            `json:"excluded"`
-	Append   core.PageDTO            `json:"append"`
-	Prepend  core.PageDTO            `json:"prepend"`
-	Reset    core.PageDTO            `json:"reset"`
+	Adapter  string                     `json:"adapter"`
+	Initial  json.RawMessage            `json:"initial"`
+	Deferred map[string]json.RawMessage `json:"deferred"`
+	Excluded json.RawMessage            `json:"excluded"`
+	Append   json.RawMessage            `json:"append"`
+	Prepend  json.RawMessage            `json:"prepend"`
+	Reset    json.RawMessage            `json:"reset"`
 }
 
 func TestPinnedClientProtocolReplay(t *testing.T) {
@@ -38,7 +39,7 @@ func TestPinnedClientProtocolReplay(t *testing.T) {
 	require.NoError(t, err)
 	fixtures := make([]replayFixture, 0, 3)
 	for _, adapter := range []string{"legacy", "fiber", "http"} {
-		fixture := replayFixture{Adapter: adapter, Deferred: make(map[string]core.PageDTO)}
+		fixture := replayFixture{Adapter: adapter, Deferred: make(map[string]json.RawMessage)}
 		fixture.Initial = renderReplayPage(t, adapter, nil, 1)
 		for _, prop := range []string{"a", "b"} {
 			fixture.Deferred[prop] = renderReplayPage(t, adapter, map[string]string{core.HeaderPartialOnly: prop}, 1)
@@ -64,7 +65,7 @@ func TestPinnedClientProtocolReplay(t *testing.T) {
 	t.Logf("%s", output)
 }
 
-func renderReplayPage(t *testing.T, adapter string, headers map[string]string, page int) core.PageDTO {
+func renderReplayPage(t *testing.T, adapter string, headers map[string]string, page int) json.RawMessage {
 	t.Helper()
 	props := map[string]any{
 		"title": "new", "profile": core.DeepMerge(map[string]any{"name": "Alice"}),
@@ -106,7 +107,8 @@ func renderReplayPage(t *testing.T, adapter string, headers map[string]string, p
 	}
 	defer response.Body.Close()
 	require.Equal(t, http.StatusOK, response.StatusCode)
-	var result core.PageDTO
-	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
-	return result
+	data, err := io.ReadAll(response.Body)
+	require.NoError(t, err)
+	require.True(t, json.Valid(data))
+	return json.RawMessage(data)
 }

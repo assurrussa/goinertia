@@ -14,10 +14,10 @@ adapters execute this code. Those features are substantial reusable behavior;
 their extraction is more than a common interface around two handlers.
 
 The baseline had approximately 2774 physical Go lines in its production root
-files. The initial split had roughly 4325 production lines. After the protocol audit,
-there are approximately 2421 in core, 1223 in Fiber, 641 in HTTP and 179 in the
-root facade: roughly 4464 total, including comments and excluding tests/generated
-mocks. This is about 61% more source than the original, not a free abstraction.
+files. The initial split had roughly 4325 production lines. After the rereview fixes,
+there are approximately 2513 in core, 1223 in Fiber, 641 in HTTP and 179 in the
+root facade: roughly 4556 total, including comments and excluding tests/generated
+mocks. This is about 64% more source than the original, not a free abstraction.
 Fiber aliases/options and facade forwarding account for part of the increase.
 The HTTP lifecycle includes precommit session cookies and response status,
 streaming, informational responses and optional writer capabilities. These

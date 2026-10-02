@@ -90,3 +90,9 @@ return inertia.Render(c, "Feed", map[string]any{
     }),
 })
 ```
+
+Nested lazy callbacks in map[string]any and []any containers use separate cache
+keys for literal keys, nested map/array paths and flash/shared/context/request
+layers. Context and request callbacks at the same path are independent; request
+values retain precedence. Input containers are copied only when a callback
+changes a child, and are never mutated by resolution.

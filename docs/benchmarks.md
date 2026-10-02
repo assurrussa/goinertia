@@ -132,7 +132,7 @@ measures 481 ns/op, 168 B/op and 14 allocations, with required copies preserved.
 
 Some raw samples still have substantial variance. No resolved regression in a
 short workstation matrix proves neither exact equality nor a universal zero-loss
-guarantee. Native HTTP flash remains costlier than old Fiber (1090 ns/op, 2392
+guarantee. Native HTTP flash is a different transport path from the old Fiber fixture (1090 ns/op, 2392
 B/op, 22 allocations versus 861/1545/19), reflecting the native lifecycle and
 fixture differences; it is not hidden behind the Fiber results. The architecture direction now retains both adapters; measured budgets still
 require review.
@@ -174,10 +174,45 @@ empty-request cost/uncertainty budget, not a universal no-regression claim.
 The focused series samples 64–82% idle CPU; a few swap-in pages occur in that
 sample. No broad matrix is discarded in favor of the focused result.
 
-Native HTTP flash remains costlier than old Fiber: 1116/2392/22 versus
-848/1545/19. The separate mandatory metadata copy fixture is 483 ns/op,
+The HTTP flash fixture measures 1116/2392/22 and the old Fiber fixture
+848/1545/19. These are different transport dispatch/writer paths, not an HTTP
+before/after baseline or an isolated HTTP adapter regression. The separate mandatory metadata copy fixture is 483 ns/op,
 168 B/op and 14 allocations and is not subtracted from adapter measurements.
 Nested lazy maps/slices now require copies when callbacks change children;
 this ownership cost is not measured by the flat-prop warm-page matrix and must
 not be called adapter-only overhead. There is no production/network throughput
 or full-protocol performance claim.
+
+
+## Focused rereview of empty Fiber JSON at 009f3a7
+
+The original five samples were 1220.8 ns/op old and 1262.6 native (+41.8 ns,
++3.424%); 1289/23 versus 1269/15 B/op/allocs. The exact two-sided Mann-Whitney
+p-value is 0.015873. A matched-round, 100000-resample percentile bootstrap gives
+95% repeat-run bounds +1.65% to +5.80%. This estimates this workstation series;
+it does not establish cross-machine confidence. Benchstat's displayed ± range
+is variation, not a 95% confidence interval.
+
+Two additional ten-round, alternating 1s series compared old, facade, native
+and small local context experiments, at the same unchanged head. One series
+measured old/facade/native means 1257.8/1289.0/1301.1 ns; the second measured
+1250.1/1262.6/1280.3 ns. The second native/old ratio is +2.416%, with bootstrap
+bounds +1.48% to +3.28% and exact untrimmed p=0.01557. Facade/old is +1.00%,
+bounds -0.11% to +2.09%, p=0.1964. Neither series replaces the original finding.
+
+Native helper context adds 48 B and one allocation relative to the facade.
+This code predates the protocol audit; new nested/partial prop branches are not
+executed for empty props. Required owned request metadata is common to both
+paths and is not isolated adapter overhead. An adapter-local compact context
+saved 16 B, and a context/State coallocation also removed one allocation. The
+latter measured 1276.4 ns versus native 1280.3 (p=0.9853 untrimmed); no sequential
+CPU improvement was resolved. Both experimental variants passed full race x5
+and context deadline/value/cause/helper checks. They remain unmerged: the
+additional machinery has no demonstrated ns/op benefit. No pooling, unsafe
+aliases or ownership removal was used.
+
+The small native empty-request CPU regression remains a performance acceptance
+item. These experiments do not prove it is an unavoidable correctness cost.
+Further tuning is separate from the mandatory cache-key/source-compatibility
+fixes. Measurements at 009f3a7 are historical evidence, not measurements of the
+subsequent wire-serialization/cache-key changes.

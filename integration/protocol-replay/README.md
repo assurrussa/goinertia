@@ -22,6 +22,8 @@ Run from the module root with Node 24 available:
 GOINERTIA_CLIENT_REPLAY=1 go test -run '^TestPinnedClientProtocolReplay$' -count=1 ./
 ```
 
-This opt-in test fails if Node is missing and runs with a bounded timeout. The
-normal Go suite skips it, so verify it separately after protocol changes. No
+The test fails if Node is missing and runs with a bounded timeout. `make check`
+and the existing required Go workflow run `make protocol-replay` with Node 24;
+the plain Go suite still skips it. The replay uses raw adapter response JSON,
+so wire-only fields are not lost in a public DTO decode/re-encode round trip. No
 npm install, frontend asset build, provider or remote service is used.

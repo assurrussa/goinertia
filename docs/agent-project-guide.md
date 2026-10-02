@@ -18,7 +18,8 @@ The compatible wire contract is a documented Inertia v2.x subset; current
 official documentation targets v3. Read [protocol coverage](protocol-coverage.md)
 before claiming full protocol/client compatibility. The separate
 `integration/nethttp-consumer` module validates the public HTTP API and its compiled
-dependency graph without root/Fiber imports; run its gates explicitly.
+dependency graph without root/Fiber imports. `make check` and the Go workflow
+run it and the pinned Node 24 client replay explicitly.
 
 ## Public Surface
 

@@ -347,7 +347,7 @@ func (i *Inertia) BuildPage(c *State, component string, props map[string]any) (*
 		return nil, err
 	}
 
-	i.addRequestProps(c, page, props, partial)
+	i.addRequestProps(c, page, props, partial, requestSource)
 	i.applyPageMeta(c, page)
 	i.ensureErrorsProp(c, page)
 	i.applyErrorBag(c, page)
@@ -455,6 +455,12 @@ func parseHeaderList(value string) map[string]struct{} {
 // so we skip it for normal renders and for Precognition requests.
 func (i *Inertia) loadFlashSessionData(c *State, page *PageDTO, partial *partialConfig) {
 	flashData := c.FlashData
+	if len(flashData) == 0 {
+		return
+	}
+	previous := c.propSource
+	c.propSource = flashSource
+	defer func() { c.propSource = previous }()
 
 	if data, ok := flashData[ContextPropsFlash].(map[string]string); ok && len(data) > 0 {
 		i.setPropValue(c, page, ContextPropsFlash, data, partial)
@@ -481,7 +487,7 @@ func (i *Inertia) addContextProps(c *State, page *PageDTO, partial *partialConfi
 // addSharedProps adds shared props to the page.
 func (i *Inertia) addSharedProps(c *State, page *PageDTO, partial *partialConfig, overrideKeys map[string]struct{}) {
 	if len(overrideKeys) == 0 {
-		i.addRequestProps(c, page, i.sharedProps, partial)
+		i.addRequestProps(c, page, i.sharedProps, partial, sharedSource)
 		return
 	}
 
@@ -492,20 +498,26 @@ func (i *Inertia) addSharedProps(c *State, page *PageDTO, partial *partialConfig
 		}
 		filtered[key] = value
 	}
-	i.addRequestProps(c, page, filtered, partial)
+	i.addRequestProps(c, page, filtered, partial, sharedSource)
 }
 
 // addLocalContextProps adds local context props to the page.
 func (i *Inertia) addLocalContextProps(c *State, page *PageDTO, partial *partialConfig) error {
-	i.addRequestProps(c, page, c.Props, partial)
+	i.addRequestProps(c, page, c.Props, partial, contextSource)
 	return nil
 }
 
 // addRequestProps adds request-specific props to the page.
-func (i *Inertia) addRequestProps(c *State, page *PageDTO, props map[string]any, partial *partialConfig) {
+func (i *Inertia) addRequestProps(c *State, page *PageDTO, props map[string]any, partial *partialConfig, source propSource) {
+	if len(props) == 0 {
+		return
+	}
+	previous := c.propSource
+	c.propSource = source
 	for key, value := range props {
 		i.setPropValue(c, page, key, value, partial)
 	}
+	c.propSource = previous
 }
 
 func (i *Inertia) collectOverrideKeys(c *State, props map[string]any) map[string]struct{} {
@@ -678,10 +690,9 @@ func (i *Inertia) handleScrollProp(c *State, page *PageDTO, key string, prop Scr
 		page.ScrollProps = make(map[string]ScrollPropConfig)
 	}
 	cfg := prop.Config
-	cfg.Reset = partial != nil && partial.isReset(key)
 	page.ScrollProps[key] = cfg
 
-	if cfg.Reset {
+	if partial != nil && partial.isReset(key) {
 		return true
 	}
 	mergePath := key
@@ -712,9 +723,10 @@ func (i *Inertia) RenderHTML(c *State, page *PageDTO) ([]byte, error) {
 	}
 
 	viewData["page"] = page
+	viewData["pageJSON"] = pageResponse(page, c.Meta.Reset)
 
 	if i.IsSSREnabled() {
-		ssr, err := i.ProcessSSR(c.Context, page)
+		ssr, err := i.processSSR(c.Context, viewData["pageJSON"])
 		if err != nil {
 			return nil, err
 		}
@@ -838,12 +850,13 @@ func (i *Inertia) HotServerURL() string {
 	return i.hotURL
 }
 
-func (i *Inertia) cacheLazy(c *State, key string, lazy LazyProp) (any, error) {
+func (i *Inertia) cacheLazy(c *State, path string, nested bool, lazy LazyProp) (any, error) {
 	cache := c.lazyCache
 	if cache == nil {
-		cache = make(map[string]any)
+		cache = make(map[lazyCacheKey]any)
 		c.lazyCache = cache
 	}
+	key := lazyCacheKey{path: path, source: c.propSource, nested: nested}
 
 	if value, ok := cache[key]; ok {
 		return value, nil
@@ -862,7 +875,7 @@ func (i *Inertia) cacheLazy(c *State, key string, lazy LazyProp) (any, error) {
 func (i *Inertia) resolvePropValue(c *State, key string, value any) (any, error) {
 	switch val := value.(type) {
 	case LazyProp:
-		result, err := i.cacheLazy(c, key, val)
+		result, err := i.cacheLazy(c, key, false, val)
 		if err != nil {
 			return nil, err
 		}

@@ -21,8 +21,26 @@ type State struct {
 	Props, ViewData, FlashData map[string]any
 	InvalidViewData            bool
 	pageMeta                   *pageMeta
-	lazyCache                  map[string]any
+	lazyCache                  map[lazyCacheKey]any
+	propSource                 propSource
 	legacyContext              context.Context //nolint:containedctx // Compatibility callback context is request-local.
+}
+
+type propSource uint8
+
+const (
+	flashSource propSource = iota
+	sharedSource
+	contextSource
+	requestSource
+)
+
+// Source and nesting are separate from the key, so literal JSON keys cannot
+// alias nested paths or callbacks from a different precedence layer.
+type lazyCacheKey struct {
+	path   string
+	source propSource
+	nested bool
 }
 
 // NewState constructs a neutral request state.

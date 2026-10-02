@@ -98,6 +98,10 @@ func (i *Inertia) DisableSSR() {
 }
 
 func (i *Inertia) ProcessSSR(ctx context.Context, page *PageDTO) (*SsrDTO, error) {
+	return i.processSSR(ctx, page)
+}
+
+func (i *Inertia) processSSR(ctx context.Context, page any) (*SsrDTO, error) {
 	if !i.IsSSREnabled() {
 		return nil, nil //nolint:nilnil // is need
 	}

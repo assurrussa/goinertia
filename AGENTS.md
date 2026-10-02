@@ -73,7 +73,8 @@ and contract-focused; do not copy full local README sections into wiki.
   `go list -deps -test ./...` for any Fiber/fasthttp package.
 
 `make check` runs tidy, generate, formatting, vet, lint, tests, race tests,
-and HTML coverage. It expects local tools such as `gofumpt`, `gci`, and
+HTML coverage, pinned client replay and public HTTP consumer gates. It expects
+Node 24 and local tools such as `gofumpt`, `gci`, and
 `golangci-lint`.
 
 Example applications have their own `package.json` files. Install and build

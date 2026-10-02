@@ -401,7 +401,7 @@ func (i *Inertia) Render(c fiber.Ctx, component string, props map[string]any) er
 	}
 
 	if c.Get(HeaderInertia) != "" {
-		return i.renderJSON(c, page)
+		return i.renderJSON(c, s, page)
 	}
 
 	return i.renderHTML(c, s, page)
@@ -455,8 +455,8 @@ func (i *Inertia) setFlashSessionData(c fiber.Ctx) {
 }
 
 // loadFlashSessionData loads flash data from session storage.
-func (i *Inertia) renderJSON(c fiber.Ctx, page *PageDTO) error {
-	js, err := json.Marshal(page)
+func (i *Inertia) renderJSON(c fiber.Ctx, s *core.State, page *PageDTO) error {
+	js, err := core.MarshalPage(page, s.Meta.Reset)
 	if err != nil {
 		return fmt.Errorf("error marshaling page: %w", err)
 	}

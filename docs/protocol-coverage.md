@@ -135,8 +135,15 @@ commitment, preventing an error template from being appended to a sent body.
 These have targeted shared/core/HTTP regressions. The old Fiber test requiring
 once metadata for an unselected prop now asserts its absence, matching the
 reference adapter's metadata filter. Existing helper signatures and facade
-aliases remain. ScrollPropConfig gains an additive Reset field with omitempty wire encoding; consumers should use
-keyed struct literals. The existing and GoAdmin consumer checks cover this API.
+aliases remain. ScrollPropConfig retains its original four-field layout, including
+positional literals. The request-only reset flag is encoded by an internal wire
+view, rather than added to the public DTO/config. Raw JSON, default HTML and SSR
+fixtures cover it. For direct core consumers, BuildPage returns the compatible
+DTO; `core.MarshalPage(page, state.Meta.Reset)` creates the request wire response.
+Plain json.Marshal(PageDTO) lacks request-only metadata. The adapters perform
+this step, and replay fixtures keep raw response JSON. Nested lazy cache keys use
+source layers and length-prefixed
+map/array paths; literal dots and context/request callbacks cannot alias.
 Full fmt/vet/lint/build, existing Fiber tests, shared fixtures, race x5, local SSR and session checks, external
 consumers, GoAdmin 0.7 source integration and performance comparisons remain
 required after code changes.
@@ -179,10 +186,12 @@ The compiled/test graph must contain no `github.com/gofiber/` or
 `github.com/valyala/fasthttp` package. The parent module still declares Fiber for
 the compatibility API; that module requirement is distinct from native HTTP's
 compiled/runtime imports. The nested module is excluded from the parent
-`go test ./...`, so its checks are explicit. No frontend/browser test results
+`go test ./...`; `make check` and the existing required Go workflow run its
+vet/build/race/dependency gates explicitly. No frontend/browser test results
 are asserted by this consumer.
 
-A focused pinned v2.3.18 client replay is run separately with
+A focused pinned v2.3.18 client replay is required by `make check` and the Go
+workflow through `make protocol-replay`. It can also be run separately with
 `GOINERTIA_CLIENT_REPLAY=1 go test -run '^TestPinnedClientProtocolReplay$' ./`.
 See [replay provenance and limits](../integration/protocol-replay/README.md).
 It covers grouped deferred scheduling, preservation of an excluded deep-merge
