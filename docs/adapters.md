@@ -85,6 +85,10 @@ the active request. These helpers are valid only while the request is active.
 Fiber contexts are pooled and must not be retained. Hosts set Fiber's lifecycle
 context with `c.SetContext` when cancellation is needed; SSR always uses that
 lifecycle context, including through the legacy facade.
+Repeated `State(c)` access and rendering refresh the state's lifecycle context
+from `c.Context()`, so downstream `c.SetContext` values, deadlines and
+cancellation take effect even when earlier middleware already obtained state.
+The legacy facade still passes the actual `fiber.Ctx` to lazy callbacks.
 
 ## Fiber session ownership
 

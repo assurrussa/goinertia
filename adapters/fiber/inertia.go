@@ -122,13 +122,20 @@ func RequestMeta(c fiber.Ctx) core.RequestMeta {
 
 func (i *Inertia) state(c fiber.Ctx) *core.State {
 	s, ok := c.Locals(stateKey{}).(*core.State)
-	if !ok {
+	switch {
+	case !ok:
 		if i.legacy {
 			s = core.NewLegacyState(c.Context(), c, RequestMeta(c))
 		} else {
 			s = core.NewState(Context(c), RequestMeta(c))
 		}
 		c.Locals(stateKey{}, s)
+	case i.legacy:
+		// Downstream middleware may replace the lifecycle context after State
+		// was first obtained. Keep the historical Fiber callback context intact.
+		s.Context = c.Context()
+	default:
+		s.Context = Context(c)
 	}
 	i.readLocalState(c, s)
 	return s
