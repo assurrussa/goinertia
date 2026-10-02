@@ -103,7 +103,9 @@ This ownership applies before explicit State access as well as after it.
 The exported ContextKeyProps/ViewData/PageMeta Locals remain a compatibility
 channel for direct host writes. The first manager accessing a new raw binding
 adopts it, and its raw lazy callbacks use that manager's rendering context
-contract. Adapter-published bindings belong to that manager; another manager
+contract. Redirect-only flash persistence also claims raw input before writing
+to SessionStore, so nested managers cannot persist it into different stores.
+Adapter-published bindings belong to that manager; another manager
 ignores them. Replacing a raw Locals map or metadata binding supplies new input
 to the next accessing manager. An in-place edit to a published map edits its
 current owner's data. Explicitly assigning that same binding cannot transfer

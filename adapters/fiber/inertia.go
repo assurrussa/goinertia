@@ -643,6 +643,9 @@ func (i *Inertia) setFlashSessionData(c fiber.Ctx) {
 	if len(flashData) == 0 {
 		return
 	}
+	// Claim raw redirect-only input before persistence. Another manager's
+	// middleware must not write the same binding into its own session store.
+	i.syncState(c, s)
 
 	if err := i.sessionStore.Flash(c, string(ContextKeyProps), flashData); err != nil {
 		i.logger.ErrorContext(c, "could not set flash session props", "error", err)
