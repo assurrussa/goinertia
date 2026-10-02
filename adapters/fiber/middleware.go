@@ -1,6 +1,7 @@
-package goinertia
+package fiberadapter
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -11,7 +12,7 @@ import (
 func (i *Inertia) Middleware() fiber.Handler {
 	return func(c fiber.Ctx) error {
 		addVaryHeader(c, HeaderInertia)
-		if i.precognitionVary {
+		if i.PrecognitionVary() {
 			addVaryHeader(c, HeaderPrecognition)
 		}
 		method := c.Method()
@@ -28,8 +29,8 @@ func (i *Inertia) Middleware() fiber.Handler {
 		}
 
 		// Check asset version for GET requests only
-		if method == http.MethodGet && c.Get(HeaderVersion) != i.assetVersion && !i.isPrecognitionRequest(c) {
-			c.Set(HeaderLocation, buildInertiaLocation(i.baseURLParsed, c.OriginalURL()))
+		if method == http.MethodGet && c.Get(HeaderVersion) != i.AssetVersion() && !i.isPrecognitionRequest(c) {
+			c.Set(HeaderLocation, i.ConflictLocation(c.OriginalURL()))
 			err := c.SendStatus(fiber.StatusConflict)
 			return i.redirectCheck(c, err)
 		}
@@ -43,7 +44,11 @@ func (i *Inertia) Middleware() fiber.Handler {
 
 func (i *Inertia) MiddlewareErrorListener() fiber.ErrorHandler {
 	return func(c fiber.Ctx, err error) error {
-		isAllowedErrorDetailsMessage := i.canExposeDetails(c, c.GetHeaders())
+		var ctx context.Context = c
+		if !i.legacy {
+			ctx = Context(c)
+		}
+		isAllowedErrorDetailsMessage := i.canExposeDetails(ctx, c.GetHeaders())
 		errReturn := getError(isAllowedErrorDetailsMessage, err, i.customErrorGettingHandler)
 		if i.isPrecognitionRequest(c) {
 			return i.renderPrecognitionError(c, errReturn)
@@ -73,7 +78,7 @@ func (i *Inertia) redirectCheck(c fiber.Ctx, err error) error {
 	}
 
 	addVaryHeader(c, HeaderInertia)
-	if i.precognitionVary {
+	if i.PrecognitionVary() {
 		addVaryHeader(c, HeaderPrecognition)
 	}
 	if i.shouldNoCacheResponse(c) {
@@ -105,8 +110,8 @@ func getError(isAllowedErrorDetailsMessage bool, err error, fnGetError func(err 
 	}
 
 	if errHTTP := new(ValidationError); errors.As(err, &errHTTP) {
-		return NewError(errHTTP.code, errHTTP.message).CloneValidationError(errHTTP).
-			WithFlashErrors(NewFlashError(FlashLevelWarning, errHTTP.message))
+		return NewError(errHTTP.StatusCode(), errHTTP.Error()).CloneValidationError(errHTTP).
+			WithFlashErrors(NewFlashError(FlashLevelWarning, errHTTP.Error()))
 	}
 
 	if fnGetError != nil {
@@ -124,13 +129,6 @@ func getError(isAllowedErrorDetailsMessage bool, err error, fnGetError func(err 
 	}
 
 	return ErrInternal
-}
-
-func (i *Inertia) isMethodPost(method string) bool {
-	return method == http.MethodPost ||
-		method == http.MethodPut ||
-		method == http.MethodPatch ||
-		method == http.MethodDelete
 }
 
 func (i *Inertia) isRedirectStatus(statusCode int) bool {

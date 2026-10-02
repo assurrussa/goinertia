@@ -42,3 +42,30 @@ Verification note:
 - `make lint` passes outside the sandbox. Inside the sandbox, Make/Go can fail
   before linting while trying to write Go module stat cache under
   `/Users/amir/go/pkg/mod/cache`.
+
+## 2026-10-02 Compatible native adapters
+
+- Preserved root imports as aliases/delegation to the native Fiber adapter;
+  neutral DTOs, props, concrete request metadata/state, templates/assets and
+  SSR policy now live in core. One module and Go 1.26 are retained.
+- Correctness fixes precede extraction in separate commits: 5561699 and
+  1f4701b. SSR uses net/http with owned bodies and lifecycle cancellation;
+  retry no longer mutates/reset a shared transport. Custom injection remains.
+- Root lazy callbacks still receive fiber.Ctx. Native callbacks receive a
+  lifecycle context plus typed adapter helpers. Legacy metadata Locals remain
+  usable. Constructor defaults and public mock symbols are preserved.
+- Raw sessions release acquired values; custom bridges retain ownership;
+  middleware sessions are borrowed. GoAdmin 0.7 source integration verifies
+  breadcrumbs, CSRF and rotation/flash through its own SessionBridge.
+- HTTP response policy executes before commitment and preserves streaming and
+  optional writer capabilities. Whole arbitrary responses are not buffered.
+- Validation includes make check and build on Go 1.26.7, external consumer,
+  existing Fiber suite, shared protocol fixtures and race tests. GoAdmin 0.7
+  uses its own Go 1.27.1/Fiber 3.5 dependency graph with a local replace.
+- Five benchmark comparisons ran after the other test jobs finished, using
+  the same corrected-baseline harness, Go 1.26.7 and four execution threads.
+  Small Fiber requests and flash show measurable time/allocation increases;
+  larger pages have smaller differences and parallel timings vary. Required
+  pooled-string ownership is measured separately. See docs/benchmarks.md.
+- No public release, retag, merge, host migration or production action is part
+  of this implementation. Publication is a separate authorization boundary.

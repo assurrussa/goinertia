@@ -1,12 +1,10 @@
-package goinertia
+package core
 
 import (
 	"context"
 	"html/template"
 	"io/fs"
 	"net/http"
-
-	"github.com/gofiber/fiber/v3"
 )
 
 var (
@@ -31,15 +29,15 @@ var (
 			switch {
 			case code == http.StatusBadRequest:
 				details = "Bad request"
-			case code == fiber.StatusNotFound:
+			case code == http.StatusNotFound:
 				details = "Page not found"
-			case code == fiber.StatusForbidden:
+			case code == http.StatusForbidden:
 				details = "Permission denied"
-			case code == fiber.StatusUnauthorized:
+			case code == http.StatusUnauthorized:
 				details = "Unauthorized"
 			case code == 419:
 				details = "The page expired, please try again"
-			case code == fiber.StatusTooManyRequests:
+			case code == http.StatusTooManyRequests:
 				details = "Too many request"
 			case code >= http.StatusInternalServerError:
 				details = "Something went wrong. Try again later"
@@ -88,12 +86,6 @@ func WithAssetVersion(assetVersion string) Option {
 	}
 }
 
-func WithSessionStore(sessionStore SessionStore) Option {
-	return func(i *Inertia) {
-		i.sessionStore = sessionStore
-	}
-}
-
 func WithLogger(logger Logger) Option {
 	return func(i *Inertia) {
 		i.logger = logger
@@ -126,41 +118,6 @@ func WithSharedProps(data map[string]any) Option {
 
 // WithCanExposeDetails sets a callback to decide if current request may see error details in production.
 // Useful to allow main admins to see full error messages.
-func WithCanExposeDetails(fn func(ctx context.Context, headers map[string][]string) bool) Option {
-	return func(i *Inertia) {
-		i.canExposeDetails = fn
-	}
-}
-
-// WithCustomErrorGettingHandler sets function callback for custom getting errors.
-func WithCustomErrorGettingHandler(fn func(err error) *Error) Option {
-	return func(i *Inertia) {
-		i.customErrorGettingHandler = fn
-	}
-}
-
-// WithCustomErrorDetailsHandler sets a callback to handler error details.
-func WithCustomErrorDetailsHandler(fn func(errReturn *Error, isCanDetails bool) string) Option {
-	return func(i *Inertia) {
-		i.customErrorDetailsHandler = fn
-	}
-}
-
-// WithCSRFTokenProvider registers a resolver that injects CSRF token into every rendered page.
-func WithCSRFTokenProvider(provider CSRFTokenProvider) Option {
-	return func(i *Inertia) {
-		i.csrfTokenProvider = provider
-	}
-}
-
-// WithCSRFTokenCheckProvider registers a resolver that check CSRF token into every rendered page.
-func WithCSRFTokenCheckProvider(provider CSRFTokenCheckProvider) Option {
-	return func(i *Inertia) {
-		i.csrfTokenCheckProvider = provider
-	}
-}
-
-// WithCSRFPropName overrides the prop key used when injecting CSRF token.
 func WithCSRFPropName(prop string) Option {
 	return func(i *Inertia) {
 		if prop == "" {
@@ -197,3 +154,6 @@ func WithPrecognitionVary(enabled bool) Option {
 		i.precognitionVary = enabled
 	}
 }
+
+// WithCSRFEnabled reserves the CSRF prop during partial reloads; adapters supply tokens.
+func WithCSRFEnabled(enabled bool) Option { return func(i *Inertia) { i.csrfEnabled = enabled } }

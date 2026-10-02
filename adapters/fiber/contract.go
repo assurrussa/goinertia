@@ -1,12 +1,10 @@
-package goinertia
+package fiberadapter
 
 import (
-	"context"
-
 	"github.com/gofiber/fiber/v3"
 )
 
-//go:generate mockgen -source=$GOFILE -destination=mocks/inertia_mock.gen.go -package=${GOPACKAGE}mocks
+//go:generate mockgen -source=$GOFILE -destination=../../mocks/inertia_mock.gen.go -package=goinertiamocks
 
 type (
 	CSRFTokenProvider      func(c fiber.Ctx) (string, error)
@@ -30,16 +28,4 @@ type FiberSessionStore interface {
 	Get(key any) any
 	Delete(key any)
 	Save() error
-}
-
-type Logger interface {
-	DebugContext(ctx context.Context, msg string, args ...any)
-	InfoContext(ctx context.Context, msg string, args ...any)
-	WarnContext(ctx context.Context, msg string, args ...any)
-	ErrorContext(ctx context.Context, msg string, args ...any)
-}
-
-type SSRClient interface {
-	Reset()
-	Post(ctx context.Context, url string, body []byte, headers map[string]string) (int, []byte, error)
 }

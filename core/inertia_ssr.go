@@ -1,4 +1,4 @@
-package goinertia
+package core
 
 import (
 	"bytes"
@@ -10,8 +10,6 @@ import (
 	"io"
 	"net/http"
 	"time"
-
-	"github.com/gofiber/fiber/v3"
 )
 
 const (
@@ -99,7 +97,7 @@ func (i *Inertia) DisableSSR() {
 	i.ssrCache = nil
 }
 
-func (i *Inertia) processSSR(c fiber.Ctx, page *PageDTO) (*SsrDTO, error) {
+func (i *Inertia) ProcessSSR(ctx context.Context, page *PageDTO) (*SsrDTO, error) {
 	if !i.IsSSREnabled() {
 		return nil, nil //nolint:nilnil // is need
 	}
@@ -108,7 +106,7 @@ func (i *Inertia) processSSR(c fiber.Ctx, page *PageDTO) (*SsrDTO, error) {
 
 	js, err := json.Marshal(page)
 	if err != nil {
-		i.logger.ErrorContext(c, "SSR marshal failed", "error", err)
+		i.logger.ErrorContext(ctx, "SSR marshal failed", "error", err)
 		return nil, fmt.Errorf("error marshaling page: %w", err)
 	}
 
@@ -120,7 +118,7 @@ func (i *Inertia) processSSR(c fiber.Ctx, page *PageDTO) (*SsrDTO, error) {
 	}
 
 	reqHeader := map[string]string{
-		fiber.HeaderContentType: fiber.MIMEApplicationJSON,
+		"Content-Type": "application/json",
 	}
 	if len(i.ssrConfig.Headers) > 0 {
 		for key, value := range i.ssrConfig.Headers {
@@ -129,7 +127,7 @@ func (i *Inertia) processSSR(c fiber.Ctx, page *PageDTO) (*SsrDTO, error) {
 	}
 
 	var reqCtx context.Context
-	reqCtx = c.Context()
+	reqCtx = ctx
 	var cancel context.CancelFunc
 	if i.ssrConfig.Timeout > 0 {
 		reqCtx, cancel = context.WithTimeout(reqCtx, i.ssrConfig.Timeout)
@@ -152,7 +150,7 @@ func (i *Inertia) processSSR(c fiber.Ctx, page *PageDTO) (*SsrDTO, error) {
 		}
 		if attempt < maxRetries {
 			i.logger.WarnContext(
-				c, "SSR retrying request",
+				ctx, "SSR retrying request",
 				"attempt", attempt+1,
 				"url", i.ssrConfig.URL,
 				"status", statusCode,
@@ -165,19 +163,19 @@ func (i *Inertia) processSSR(c fiber.Ctx, page *PageDTO) (*SsrDTO, error) {
 	}
 
 	if err != nil {
-		i.logger.ErrorContext(c, "SSR request failed", "error", err, "url", i.ssrConfig.URL)
+		i.logger.ErrorContext(ctx, "SSR request failed", "error", err, "url", i.ssrConfig.URL)
 		return nil, fmt.Errorf("error posting ssr: %w", err)
 	}
 
 	if statusCode >= 400 {
-		i.logger.ErrorContext(c, "SSR response error", "status", statusCode, "url", i.ssrConfig.URL)
+		i.logger.ErrorContext(ctx, "SSR response error", "status", statusCode, "url", i.ssrConfig.URL)
 		return nil, ErrBadSsrStatusCode
 	}
 
 	ssr := new(SsrDTO)
 	err = json.Unmarshal(body, ssr)
 	if err != nil {
-		i.logger.ErrorContext(c, "SSR unmarshal failed", "error", err)
+		i.logger.ErrorContext(ctx, "SSR unmarshal failed", "error", err)
 		return nil, fmt.Errorf("error unmarshalling ssr: %w", err)
 	}
 

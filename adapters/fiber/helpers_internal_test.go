@@ -1,4 +1,4 @@
-package goinertia
+package fiberadapter
 
 import (
 	"context"

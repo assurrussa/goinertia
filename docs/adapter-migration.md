@@ -22,7 +22,16 @@ context. SSR errors remain errors. Raw Fiber Store sessions transfer ownership;
 custom SessionStore implementations retain their own lifetime. No host project
 changes are part of this migration.
 
-The first corrected baseline passed `go test -race -count=5 ./...` on the local
-Go 1.27.1 compiler. The module directive is unchanged. Go 1.26 compiler validation
-is a separate gate. Benchmark timing is deferred while concurrent API/GeoIP work
-uses the host. No performance claims or public tag validation have been made.
+The completed corrected baseline is 1f4701b572f77d8049d1a0c90e873d081b02fa7a.
+It also covers direct HTML Vary and no-cache/flash policy on version conflicts.
+Core extraction and both native adapters are implemented locally. The complete
+existing Fiber suite and shared protocol fixtures pass on Go 1.26.7 with
+`-race -count=5`. The full make check, build and external consumer gates pass.
+GoAdmin 0.7 source integration uses its own Go 1.27.1/Fiber 3.5 graph and a
+local module replacement; breadcrumbs, CSRF and session rotation/flash pass.
+
+Five sequential benchmark comparisons completed after the other test jobs
+finished. Results include measurable small-request/flash costs and variable
+parallel timings; see [methodology and results](benchmarks.md). There is no
+zero-loss promise. Public tag/release validation has not been performed, and
+publication remains a separate authorization step.

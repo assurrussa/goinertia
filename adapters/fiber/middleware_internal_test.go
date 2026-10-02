@@ -1,4 +1,4 @@
-package goinertia
+package fiberadapter
 
 import (
 	"errors"
@@ -73,8 +73,8 @@ func Test_getError(t *testing.T) {
 	fnAppValidationError := func(checkErr error) *Error {
 		var e *ValidationError
 		if errors.As(checkErr, &e) {
-			return NewError(e.code, e.message).CloneValidationError(e).
-				WithFlashErrors(NewFlashError(FlashLevelWarning, e.message))
+			return NewError(e.StatusCode(), e.Error()).CloneValidationError(e).
+				WithFlashErrors(NewFlashError(FlashLevelWarning, e.Error()))
 		}
 
 		return nil

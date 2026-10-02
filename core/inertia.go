@@ -1,4 +1,4 @@
-package goinertia
+package core
 
 import (
 	"bytes"
@@ -11,9 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-
-	"github.com/goccy/go-json"
-	"github.com/gofiber/fiber/v3"
 
 	"github.com/assurrussa/goinertia/public"
 )
@@ -38,38 +35,33 @@ type partialConfig struct {
 }
 
 type Inertia struct {
-	baseURL                   string
-	baseURLParsed             *url.URL
-	rootTemplate              string
-	rootHotTemplate           string
-	rootErrorTemplate         string
-	assetVersion              string
-	sharedProps               map[string]any
-	sharedFuncMap             template.FuncMap
-	sharedViewData            map[string]any
-	parsedTemplate            *template.Template
-	parsedTemplateOnce        sync.Once
-	parsedTemplateErr         error
-	parsedErrorTemplate       *template.Template
-	parsedErrorTemplateOnce   sync.Once
-	parsedErrorTemplateErr    error
-	hotURL                    string
-	hotURLOnce                sync.Once
-	templateFS                fs.FS
-	publicFS                  fs.ReadFileFS
-	ssrConfig                 SSRConfig
-	ssrClient                 SSRClient
-	ssrCache                  *ssrCache
-	sessionStore              SessionStore // Adds session support.
-	logger                    Logger
-	canExposeDetails          func(ctx context.Context, headers map[string][]string) bool
-	customErrorDetailsHandler func(errReturn *Error, isCanDetails bool) string
-	customErrorGettingHandler func(err error) *Error
-	csrfTokenCheckProvider    CSRFTokenCheckProvider
-	csrfTokenProvider         CSRFTokenProvider
-	csrfPropName              string
-	isDev                     bool
-	precognitionVary          bool
+	baseURL                 string
+	baseURLParsed           *url.URL
+	rootTemplate            string
+	rootHotTemplate         string
+	rootErrorTemplate       string
+	assetVersion            string
+	sharedProps             map[string]any
+	sharedFuncMap           template.FuncMap
+	sharedViewData          map[string]any
+	parsedTemplate          *template.Template
+	parsedTemplateOnce      sync.Once
+	parsedTemplateErr       error
+	parsedErrorTemplate     *template.Template
+	parsedErrorTemplateOnce sync.Once
+	parsedErrorTemplateErr  error
+	hotURL                  string
+	hotURLOnce              sync.Once
+	templateFS              fs.FS
+	publicFS                fs.ReadFileFS
+	ssrConfig               SSRConfig
+	ssrClient               SSRClient
+	ssrCache                *ssrCache
+	logger                  Logger
+	csrfPropName            string
+	csrfEnabled             bool
+	isDev                   bool
+	precognitionVary        bool
 }
 
 func Must(inr *Inertia, err error) *Inertia {
@@ -103,7 +95,7 @@ func NewWithValidation(baseURL string, opts ...Option) (*Inertia, error) {
 //				inertia.WithRootHotTemplate("internal/adminext/public/hot"),
 //				inertia.WithFS(nil),
 //				inertia.WithPublicFS(nil),
-//	         inertia.WithCanExposeDetails(func(c fiber.Ctx) bool {
+//	         inertia.WithCanExposeDetails(func(c *State) bool {
 //		          admin := admin_middleware.GetAdminAuth(c)
 //		          return admin != nil && admin.HasRoles("admin")
 //	         }),
@@ -126,36 +118,21 @@ func New(baseURL string, opts ...Option) *Inertia {
 			"raw":     raw,
 			"asset":   asset,
 		},
-		sharedViewData:            make(map[string]any),
-		canExposeDetails:          DefaultCanExpose,
-		customErrorGettingHandler: DefaultCustomGettingError,
-		customErrorDetailsHandler: DefaultCustomErrorDetails,
-		csrfPropName:              ContextPropsCSRFToken,
-		precognitionVary:          true,
+		sharedViewData:   make(map[string]any),
+		csrfPropName:     ContextPropsCSRFToken,
+		precognitionVary: true,
 	}
 
 	for _, o := range opts {
 		o(inr)
 	}
 
-	if inr.rootHotTemplate == "" {
-		inr.rootHotTemplate = "hot"
-	}
-
-	if inr.rootTemplate == "" {
-		inr.rootTemplate = "app.gohtml"
-	}
-
-	if inr.rootErrorTemplate == "" {
-		inr.rootErrorTemplate = "error.gohtml"
-	}
+	inr.NormalizeConfig()
 
 	inr.baseURLParsed = parseInertiaBaseURL(inr.baseURL)
 	if inr.baseURLParsed != nil {
 		inr.baseURL = inr.baseURLParsed.String()
 	}
-
-	inr.registerCSRFSharedProp()
 
 	return inr
 }
@@ -163,12 +140,12 @@ func New(baseURL string, opts ...Option) *Inertia {
 func (i *Inertia) ParseTemplates() error {
 	var err error
 
-	_, err = i.createRootTemplate()
+	_, err = i.RootTemplate()
 	if err != nil {
 		return err
 	}
 
-	_, err = i.createRootErrorTemplate()
+	_, err = i.ErrorTemplate()
 	if err != nil {
 		return err
 	}
@@ -176,22 +153,22 @@ func (i *Inertia) ParseTemplates() error {
 	return nil
 }
 
-func (i *Inertia) WithProp(c fiber.Ctx, key string, value any) {
+func (i *Inertia) WithProp(c *State, key string, value any) {
 	props := i.getContextKeyProps(c)
 
 	props[key] = value
-	c.Locals(ContextKeyProps, props)
+	c.Props = props
 }
 
-func (i *Inertia) WithViewData(c fiber.Ctx, key string, value any) {
+func (i *Inertia) WithViewData(c *State, key string, value any) {
 	data := i.getContextKeyViewData(c)
 
 	data[key] = value
-	c.Locals(ContextKeyViewData, data)
+	c.ViewData = data
 }
 
 // WithFlashMessages adds flashes messages.
-func (i *Inertia) WithFlashMessages(c fiber.Ctx, flashMessages ...FlashError) {
+func (i *Inertia) WithFlashMessages(c *State, flashMessages ...FlashError) {
 	if len(flashMessages) == 0 {
 		return
 	}
@@ -202,7 +179,7 @@ func (i *Inertia) WithFlashMessages(c fiber.Ctx, flashMessages ...FlashError) {
 }
 
 // WithValidationErrors adds validation errors (equivalent to Django's form validation).
-func (i *Inertia) WithValidationErrors(c fiber.Ctx, errors ValidationErrors) {
+func (i *Inertia) WithValidationErrors(c *State, errors ValidationErrors) {
 	if len(errors) == 0 {
 		return
 	}
@@ -218,7 +195,7 @@ func (i *Inertia) WithValidationErrors(c fiber.Ctx, errors ValidationErrors) {
 
 // WithErrors adds validation errors to the response.
 // Only adds to context; session is written via setFlashSessionData.
-func (i *Inertia) WithErrors(c fiber.Ctx, errors map[string]string) {
+func (i *Inertia) WithErrors(c *State, errors map[string]string) {
 	props := i.getContextKeyProps(c)
 
 	curErrors := make(map[string]string)
@@ -234,41 +211,41 @@ func (i *Inertia) WithErrors(c fiber.Ctx, errors map[string]string) {
 }
 
 // WithError adds a single validation error.
-func (i *Inertia) WithError(c fiber.Ctx, field string, message string) {
+func (i *Inertia) WithError(c *State, field string, message string) {
 	i.WithErrors(c, map[string]string{
 		field: message,
 	})
 }
 
 // WithFlashSuccess adds success flash message.
-func (i *Inertia) WithFlashSuccess(c fiber.Ctx, message string) {
+func (i *Inertia) WithFlashSuccess(c *State, message string) {
 	i.WithFlash(c, FlashLevelSuccess, message)
 }
 
 // WithFlashInfo adds info flash message.
-func (i *Inertia) WithFlashInfo(c fiber.Ctx, message string) {
+func (i *Inertia) WithFlashInfo(c *State, message string) {
 	i.WithFlash(c, FlashLevelInfo, message)
 }
 
 // WithFlashWarning adds warning flash message.
-func (i *Inertia) WithFlashWarning(c fiber.Ctx, message string) {
+func (i *Inertia) WithFlashWarning(c *State, message string) {
 	i.WithFlash(c, FlashLevelWarning, message)
 }
 
 // WithFlashError adds error flash message.
-func (i *Inertia) WithFlashError(c fiber.Ctx, message string) {
+func (i *Inertia) WithFlashError(c *State, message string) {
 	i.WithFlash(c, FlashLevelError, message)
 }
 
 // WithFlashOld adds flash message to the response.
 // Only adds to context; session is written via setFlashSessionData.
-func (i *Inertia) WithFlashOld(c fiber.Ctx, data map[string]any) {
+func (i *Inertia) WithFlashOld(c *State, data map[string]any) {
 	i.WithProp(c, ContextPropsOld, data)
 }
 
 // WithFlash adds flash message to the response.
 // Only adds to context; session is written via setFlashSessionData.
-func (i *Inertia) WithFlash(c fiber.Ctx, key FlashLevel, message string) {
+func (i *Inertia) WithFlash(c *State, key FlashLevel, message string) {
 	props := i.getContextKeyProps(c)
 
 	flash := make(map[string]string)
@@ -278,16 +255,16 @@ func (i *Inertia) WithFlash(c fiber.Ctx, key FlashLevel, message string) {
 
 	flash[key.String()] = message
 	props[ContextPropsFlash] = flash
-	c.Locals(ContextKeyProps, props)
+	c.Props = props
 }
 
 // WithLazyProp adds a lazy-evaluated prop that's only computed when requested.
-func (i *Inertia) WithLazyProp(c fiber.Ctx, key string, fn func(context.Context) (any, error)) {
+func (i *Inertia) WithLazyProp(c *State, key string, fn func(context.Context) (any, error)) {
 	i.WithProp(c, key, LazyProp{Key: key, Fn: fn})
 }
 
 // WithMatchPropsOn sets matchPropsOn metadata for the response.
-func (i *Inertia) WithMatchPropsOn(c fiber.Ctx, props ...string) {
+func (i *Inertia) WithMatchPropsOn(c *State, props ...string) {
 	if len(props) == 0 {
 		return
 	}
@@ -301,77 +278,20 @@ func (i *Inertia) WithMatchPropsOn(c fiber.Ctx, props ...string) {
 }
 
 // WithEncryptHistory sets encryptHistory metadata for the response.
-func (i *Inertia) WithEncryptHistory(c fiber.Ctx) {
+func (i *Inertia) WithEncryptHistory(c *State) {
 	meta := i.getContextKeyPageMeta(c)
 	value := true
 	meta.encryptHistory = &value
 }
 
 // WithClearHistory sets clearHistory metadata for the response.
-func (i *Inertia) WithClearHistory(c fiber.Ctx) {
+func (i *Inertia) WithClearHistory(c *State) {
 	meta := i.getContextKeyPageMeta(c)
 	value := true
 	meta.clearHistory = &value
 }
 
 // RedirectBackWithValidationErrors redirects back with multiple validation errors per field.
-func (i *Inertia) RedirectBackWithValidationErrors(c fiber.Ctx, errors ValidationErrors) error {
-	i.WithValidationErrors(c, errors)
-	return i.RedirectBack(c)
-}
-
-// RedirectBackWithErrors redirects back with validation errors stored in session.
-func (i *Inertia) RedirectBackWithErrors(c fiber.Ctx, errors map[string]string) error {
-	i.WithErrors(c, errors)
-	return i.RedirectBack(c)
-}
-
-// RedirectBack redirects back to the previous page after a successful operation.
-func (i *Inertia) RedirectBack(c fiber.Ctx) error {
-	referer := c.Get(fiber.HeaderReferer)
-	if referer == "" {
-		referer = c.OriginalURL()
-	}
-	return i.Redirect(c, referer)
-}
-
-// Redirect handles redirects according to Inertia.js protocol.
-func (i *Inertia) Redirect(c fiber.Ctx, url string) error {
-	if url == "" || url == "/" {
-		url = c.BaseURL()
-	}
-	if c.Get(HeaderInertia) != "" {
-		if i.isExternalRedirect(url) {
-			return i.RedirectExternal(c, url)
-		}
-		// For Inertia requests, use standard redirect (internal visit).
-		return c.Redirect().Status(fiber.StatusFound).To(url)
-	}
-
-	// For regular requests, use standard redirect
-	return c.Redirect().Status(fiber.StatusFound).To(url)
-}
-
-// RedirectExternal forces a full page reload for Inertia requests.
-func (i *Inertia) RedirectExternal(c fiber.Ctx, url string) error {
-	if url == "" || url == "/" {
-		url = c.BaseURL()
-	}
-
-	c.Set(HeaderLocation, url)
-	c.Set(fiber.HeaderLocation, url)
-	return c.SendStatus(fiber.StatusConflict)
-}
-
-func (i *Inertia) isPrecognitionRequest(c fiber.Ctx) bool {
-	return IsPrecognition(c)
-}
-
-func (i *Inertia) shouldNoCacheResponse(c fiber.Ctx) bool {
-	cacheControl := strings.ToLower(strings.TrimSpace(c.Get(fiber.HeaderCacheControl)))
-	return cacheControl != "" && strings.Contains(cacheControl, "no-cache")
-}
-
 func filterValidationErrors(errors ValidationErrors, only map[string]struct{}) ValidationErrors {
 	if errors == nil || len(only) == 0 {
 		return errors
@@ -388,135 +308,34 @@ func filterValidationErrors(errors ValidationErrors, only map[string]struct{}) V
 	return filtered
 }
 
-func (i *Inertia) collectPrecognitionErrors(c fiber.Ctx) ValidationErrors {
-	props := i.getContextKeyProps(c)
-	return normalizeValidationErrors(props[ContextPropsErrors])
+func (i *Inertia) getContextKeyProps(c *State) map[string]any {
+	if c.Props == nil {
+		c.Props = make(map[string]any)
+	}
+	return c.Props
 }
 
-func (i *Inertia) renderPrecognition(c fiber.Ctx, errors ValidationErrors) error {
-	addVaryHeader(c, HeaderPrecognition)
-	c.Set(HeaderPrecognition, "true")
-	if i.shouldNoCacheResponse(c) {
-		c.Set(fiber.HeaderCacheControl, "no-cache")
+func (i *Inertia) getContextKeyViewData(c *State) map[string]any {
+	if c.ViewData == nil {
+		c.ViewData = make(map[string]any)
 	}
-
-	if len(errors) == 0 {
-		c.Set(HeaderPrecognitionSuccess, "true")
-		return c.SendStatus(fiber.StatusNoContent)
-	}
-
-	payload := map[string]any{"errors": errors}
-	js, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("error marshaling precognition errors: %w", err)
-	}
-
-	c.Status(fiber.StatusUnprocessableEntity)
-	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
-	return c.Send(js)
+	return c.ViewData
 }
 
-func (i *Inertia) renderPrecognitionError(c fiber.Ctx, errReturn *Error) error {
-	errors := errReturn.ValidationErrors()
-	errors = filterValidationErrors(errors, parseHeaderList(c.Get(HeaderPrecognitionValidateOnly)))
-	if len(errors) > 0 {
-		return i.renderPrecognition(c, errors)
+func (i *Inertia) getContextKeyPageMeta(c *State) *pageMeta {
+	if c.pageMeta == nil {
+		c.pageMeta = &pageMeta{scrollProps: make(map[string]ScrollPropConfig)}
 	}
-
-	addVaryHeader(c, HeaderPrecognition)
-	c.Set(HeaderPrecognition, "true")
-	if i.shouldNoCacheResponse(c) {
-		c.Set(fiber.HeaderCacheControl, "no-cache")
-	}
-
-	status := fiber.StatusInternalServerError
-	message := ErrInternal.Message
-	if errReturn != nil {
-		if errReturn.Code != 0 {
-			status = errReturn.Code
-		}
-		if errReturn.Message != "" {
-			message = errReturn.Message
-		}
-	}
-
-	payload := map[string]any{"message": message}
-	js, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("error marshaling precognition error: %w", err)
-	}
-
-	c.Status(status)
-	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
-	return c.Send(js)
+	return c.pageMeta
 }
 
-func (i *Inertia) Render(c fiber.Ctx, component string, props map[string]any) error {
-	if i.isPrecognitionRequest(c) {
-		errors := i.collectPrecognitionErrors(c)
-		errors = filterValidationErrors(errors, parseHeaderList(c.Get(HeaderPrecognitionValidateOnly)))
-		return i.renderPrecognition(c, errors)
-	}
-
-	page, err := i.buildPage(c, component, props)
-	if err != nil {
-		return fmt.Errorf("could not build page: %w", err)
-	}
-
-	if c.Get(HeaderInertia) != "" {
-		return i.renderJSON(c, page)
-	}
-
-	return i.renderHTML(c, page)
-}
-
-// getContextKeyProps returns existing props or creates new ones.
-func (i *Inertia) getContextKeyProps(c fiber.Ctx) map[string]any {
-	return i.getContextKey(c, ContextKeyProps)
-}
-
-// getContextKeyViewData returns existing views or creates new ones.
-func (i *Inertia) getContextKeyViewData(c fiber.Ctx) map[string]any {
-	return i.getContextKey(c, ContextKeyViewData)
-}
-
-// getContextKeyPageMeta returns existing page meta or creates new one.
-func (i *Inertia) getContextKeyPageMeta(c fiber.Ctx) *pageMeta {
-	meta := c.Locals(ContextKeyPageMeta)
-	if meta != nil {
-		if pm, ok := meta.(*pageMeta); ok {
-			return pm
-		}
-	}
-
-	pm := &pageMeta{
-		scrollProps: make(map[string]ScrollPropConfig),
-	}
-	c.Locals(ContextKeyPageMeta, pm)
-	return pm
-}
-
-// getContextKey returns existing values by key or creates new ones.
-func (i *Inertia) getContextKey(c fiber.Ctx, key contextKey) map[string]any {
-	ctxData := c.Locals(key)
-	data := make(map[string]any)
-	if ctxData != nil {
-		if p, ok := ctxData.(map[string]any); ok {
-			data = p
-		}
-	}
-
-	return data
-}
-
-// buildPage constructs the page data with props from various sources.
-func (i *Inertia) buildPage(c fiber.Ctx, component string, props map[string]any) (*PageDTO, error) {
+func (i *Inertia) BuildPage(c *State, component string, props map[string]any) (*PageDTO, error) {
 	partial := i.parsePartialConfig(c, component)
 
 	page := &PageDTO{
 		Component: component,
 		Props:     make(map[string]any),
-		URL:       c.OriginalURL(),
+		URL:       c.Meta.URL,
 		Version:   i.assetVersion,
 	}
 
@@ -537,15 +356,15 @@ func (i *Inertia) buildPage(c fiber.Ctx, component string, props map[string]any)
 }
 
 // parsePartialConfig extracts partial reload configuration.
-func (i *Inertia) parsePartialConfig(c fiber.Ctx, component string) *partialConfig {
+func (i *Inertia) parsePartialConfig(c *State, component string) *partialConfig {
 	cfg := &partialConfig{
-		reset:      parseHeaderList(c.Get(HeaderReset)),
-		exceptOnce: parseHeaderList(c.Get(HeaderExceptOnceProps)),
+		reset:      parseHeaderList(c.Meta.Reset),
+		exceptOnce: parseHeaderList(c.Meta.ExceptOnceProps),
 	}
 
-	partialData := strings.TrimSpace(c.Get(HeaderPartialOnly))
-	partialExcept := strings.TrimSpace(c.Get(HeaderPartialExcept))
-	componentMatches := c.Get(HeaderPartialComponent) == component
+	partialData := strings.TrimSpace(c.Meta.PartialOnly)
+	partialExcept := strings.TrimSpace(c.Meta.PartialExcept)
+	componentMatches := c.Meta.PartialComponent == component
 
 	if componentMatches && (partialData != "" || partialExcept != "") {
 		cfg.isPartial = true
@@ -564,43 +383,24 @@ func (i *Inertia) parsePartialConfig(c fiber.Ctx, component string) *partialConf
 			ContextPropsOld:    {},
 			ContextPropsErrors: {},
 		}
-		if i.csrfPropName != "" && i.csrfTokenProvider != nil {
+		if i.csrfPropName != "" && i.csrfEnabled {
 			cfg.forceInclude[i.csrfPropName] = struct{}{}
 		}
 	}
 
-	cfg.scrollMergeIntent = strings.ToLower(strings.TrimSpace(c.Get(HeaderInfiniteScrollMergeIntent)))
+	cfg.scrollMergeIntent = strings.ToLower(strings.TrimSpace(c.Meta.ScrollMergeIntent))
 
 	return cfg
 }
 
-func (p *partialConfig) shouldIncludeProp(key string) bool {
-	if p == nil {
+func (i *Inertia) shouldIncludeProp(key string, partial *partialConfig) bool {
+	if partial == nil {
 		return true
 	}
-	if _, ok := p.forceInclude[key]; ok {
-		return true
-	}
-	if !p.isPartial {
-		return true
-	}
-	if p.hasExclude {
-		if p.exclude == nil {
-			return true
-		}
-		_, excluded := p.exclude[key]
-		return !excluded
-	}
-	if p.hasInclude {
-		if p.include == nil {
-			return false
-		}
-		_, included := p.include[key]
-		return included
-	}
-	return true
+	return partial.shouldIncludeProp(key)
 }
 
+// setPropValue sets a prop value, handling lazy props appropriately.
 func (p *partialConfig) explicitlyIncluded(key string) bool {
 	if p == nil || !p.hasInclude || p.include == nil {
 		return false
@@ -649,67 +449,8 @@ func parseHeaderList(value string) map[string]struct{} {
 // setFlashSessionData persists flash-related props (flash/errors/old) into the session.
 // It is only needed for redirect-like responses (3xx or 409 with X-Inertia-Location),
 // so we skip it for normal renders and for Precognition requests.
-func (i *Inertia) setFlashSessionData(c fiber.Ctx) {
-	if i.sessionStore == nil {
-		return
-	}
-
-	// Precognition requests should never write to flash/session.
-	if i.isPrecognitionRequest(c) {
-		return
-	}
-
-	status := c.Response().StatusCode()
-	isRedirect := status == fiber.StatusMovedPermanently ||
-		status == fiber.StatusFound ||
-		status == fiber.StatusSeeOther ||
-		status == fiber.StatusTemporaryRedirect ||
-		status == fiber.StatusPermanentRedirect
-	isInertiaLocationConflict := status == fiber.StatusConflict && len(c.Response().Header.Peek(HeaderLocation)) > 0
-	if !isRedirect && !isInertiaLocationConflict {
-		return
-	}
-
-	props := i.getContextKeyProps(c)
-	if len(props) == 0 {
-		return
-	}
-
-	// Only persist flash-related props that are meant to survive redirects.
-	flashData := make(map[string]any)
-	if data, ok := props[ContextPropsFlash].(map[string]string); ok && len(data) > 0 {
-		flashData[ContextPropsFlash] = data
-	}
-	if data, ok := props[ContextPropsErrors].(map[string]string); ok && len(data) > 0 {
-		flashData[ContextPropsErrors] = data
-	}
-	if data, ok := props[ContextPropsOld].(map[string]any); ok && len(data) > 0 {
-		flashData[ContextPropsOld] = data
-	}
-	if len(flashData) == 0 {
-		return
-	}
-
-	if err := i.sessionStore.Flash(c, string(ContextKeyProps), flashData); err != nil {
-		i.logger.ErrorContext(c, "could not set flash session props", "error", err)
-	}
-}
-
-// loadFlashSessionData loads flash data from session storage.
-func (i *Inertia) loadFlashSessionData(c fiber.Ctx, page *PageDTO, partial *partialConfig) {
-	if i.sessionStore == nil {
-		return
-	}
-
-	flashRaw, err := i.sessionStore.GetFlash(c, string(ContextKeyProps))
-	if err != nil {
-		return
-	}
-
-	flashData, ok := flashRaw.(map[string]any)
-	if !ok {
-		return
-	}
+func (i *Inertia) loadFlashSessionData(c *State, page *PageDTO, partial *partialConfig) {
+	flashData := c.FlashData
 
 	if data, ok := flashData[ContextPropsFlash].(map[string]string); ok && len(data) > 0 {
 		i.setPropValue(c, page, ContextPropsFlash, data, partial)
@@ -725,7 +466,7 @@ func (i *Inertia) loadFlashSessionData(c fiber.Ctx, page *PageDTO, partial *part
 }
 
 // addContextProps adds context-specific props to the page.
-func (i *Inertia) addContextProps(c fiber.Ctx, page *PageDTO, partial *partialConfig) error {
+func (i *Inertia) addContextProps(c *State, page *PageDTO, partial *partialConfig) error {
 	// Load flash data from the session first.
 	i.loadFlashSessionData(c, page, partial)
 
@@ -734,7 +475,7 @@ func (i *Inertia) addContextProps(c fiber.Ctx, page *PageDTO, partial *partialCo
 }
 
 // addSharedProps adds shared props to the page.
-func (i *Inertia) addSharedProps(c fiber.Ctx, page *PageDTO, partial *partialConfig, overrideKeys map[string]struct{}) {
+func (i *Inertia) addSharedProps(c *State, page *PageDTO, partial *partialConfig, overrideKeys map[string]struct{}) {
 	if len(overrideKeys) == 0 {
 		i.addRequestProps(c, page, i.sharedProps, partial)
 		return
@@ -751,20 +492,20 @@ func (i *Inertia) addSharedProps(c fiber.Ctx, page *PageDTO, partial *partialCon
 }
 
 // addLocalContextProps adds local context props to the page.
-func (i *Inertia) addLocalContextProps(c fiber.Ctx, page *PageDTO, partial *partialConfig) error {
+func (i *Inertia) addLocalContextProps(c *State, page *PageDTO, partial *partialConfig) error {
 	props := i.getContextKeyProps(c)
 	i.addRequestProps(c, page, props, partial)
 	return nil
 }
 
 // addRequestProps adds request-specific props to the page.
-func (i *Inertia) addRequestProps(c fiber.Ctx, page *PageDTO, props map[string]any, partial *partialConfig) {
+func (i *Inertia) addRequestProps(c *State, page *PageDTO, props map[string]any, partial *partialConfig) {
 	for key, value := range props {
 		i.setPropValue(c, page, key, value, partial)
 	}
 }
 
-func (i *Inertia) collectOverrideKeys(c fiber.Ctx, props map[string]any) map[string]struct{} {
+func (i *Inertia) collectOverrideKeys(c *State, props map[string]any) map[string]struct{} {
 	override := make(map[string]struct{})
 
 	for key := range props {
@@ -779,47 +520,7 @@ func (i *Inertia) collectOverrideKeys(c fiber.Ctx, props map[string]any) map[str
 	return override
 }
 
-func (i *Inertia) registerCSRFSharedProp() {
-	if i.csrfTokenProvider == nil {
-		if i.csrfPropName != "" {
-			delete(i.sharedProps, i.csrfPropName)
-		}
-		return
-	}
-
-	if i.csrfPropName == "" {
-		i.csrfPropName = ContextPropsCSRFToken
-	}
-
-	propName := i.csrfPropName
-	i.sharedProps[propName] = LazyProp{
-		Key: propName,
-		Fn: func(ctx context.Context) (any, error) {
-			fiberCtx, ok := ctx.(fiber.Ctx)
-			if !ok {
-				return "", nil
-			}
-
-			token, err := i.csrfTokenProvider(fiberCtx)
-			if err != nil {
-				return "", err
-			}
-
-			return token, nil
-		},
-	}
-}
-
-// shouldIncludeProp determines if a prop should be included based on partial reload config.
-func (i *Inertia) shouldIncludeProp(key string, partial *partialConfig) bool {
-	if partial == nil {
-		return true
-	}
-	return partial.shouldIncludeProp(key)
-}
-
-// setPropValue sets a prop value, handling lazy props appropriately.
-func (i *Inertia) setPropValue(c fiber.Ctx, page *PageDTO, key string, value any, partial *partialConfig) {
+func (i *Inertia) setPropValue(c *State, page *PageDTO, key string, value any, partial *partialConfig) {
 	if value == nil {
 		i.setNilProp(page, key, partial)
 		return
@@ -848,7 +549,7 @@ func (i *Inertia) setPropValue(c fiber.Ctx, page *PageDTO, key string, value any
 
 	result, err := i.resolvePropValue(c, key, value)
 	if err != nil {
-		i.logger.WarnContext(c, "failed to evaluate prop", "key", key, "error", err)
+		i.logger.WarnContext(c.Context, "failed to evaluate prop", "key", key, "error", err)
 		return
 	}
 
@@ -881,7 +582,7 @@ func (i *Inertia) applyOnceProp(page *PageDTO, key string, op OnceProp, partial 
 	return op.Value, false
 }
 
-func (i *Inertia) handleWrappedProp(c fiber.Ctx, page *PageDTO, key string, value any, partial *partialConfig) bool {
+func (i *Inertia) handleWrappedProp(c *State, page *PageDTO, key string, value any, partial *partialConfig) bool {
 	switch prop := value.(type) {
 	case DeferredProp:
 		return i.handleDeferredProp(c, page, key, prop, partial)
@@ -898,7 +599,7 @@ func (i *Inertia) handleWrappedProp(c fiber.Ctx, page *PageDTO, key string, valu
 	}
 }
 
-func (i *Inertia) handleDeferredProp(c fiber.Ctx, page *PageDTO, key string, prop DeferredProp, partial *partialConfig) bool {
+func (i *Inertia) handleDeferredProp(c *State, page *PageDTO, key string, prop DeferredProp, partial *partialConfig) bool {
 	if partial != nil && partial.explicitlyIncluded(key) {
 		i.setPropValue(c, page, key, prop.Value, partial)
 		return true
@@ -915,7 +616,7 @@ func (i *Inertia) handleDeferredProp(c fiber.Ctx, page *PageDTO, key string, pro
 	return true
 }
 
-func (i *Inertia) handleOptionalProp(c fiber.Ctx, page *PageDTO, key string, prop OptionalProp, partial *partialConfig) bool {
+func (i *Inertia) handleOptionalProp(c *State, page *PageDTO, key string, prop OptionalProp, partial *partialConfig) bool {
 	if partial == nil || !partial.explicitlyIncluded(key) {
 		return true
 	}
@@ -923,7 +624,7 @@ func (i *Inertia) handleOptionalProp(c fiber.Ctx, page *PageDTO, key string, pro
 	return true
 }
 
-func (i *Inertia) handleAlwaysProp(c fiber.Ctx, page *PageDTO, key string, prop AlwaysProp, partial *partialConfig) bool {
+func (i *Inertia) handleAlwaysProp(c *State, page *PageDTO, key string, prop AlwaysProp, partial *partialConfig) bool {
 	if partial != nil {
 		if partial.forceInclude == nil {
 			partial.forceInclude = make(map[string]struct{})
@@ -934,7 +635,7 @@ func (i *Inertia) handleAlwaysProp(c fiber.Ctx, page *PageDTO, key string, prop 
 	return true
 }
 
-func (i *Inertia) handleMergeProp(c fiber.Ctx, page *PageDTO, key string, prop MergeProp, partial *partialConfig) bool {
+func (i *Inertia) handleMergeProp(c *State, page *PageDTO, key string, prop MergeProp, partial *partialConfig) bool {
 	if partial == nil || !partial.isReset(key) {
 		switch {
 		case prop.Prepend:
@@ -952,7 +653,7 @@ func (i *Inertia) handleMergeProp(c fiber.Ctx, page *PageDTO, key string, prop M
 	return true
 }
 
-func (i *Inertia) handleScrollProp(c fiber.Ctx, page *PageDTO, key string, prop ScrollProp, partial *partialConfig) bool {
+func (i *Inertia) handleScrollProp(c *State, page *PageDTO, key string, prop ScrollProp, partial *partialConfig) bool {
 	if page.ScrollProps == nil {
 		page.ScrollProps = make(map[string]ScrollPropConfig)
 	}
@@ -974,47 +675,23 @@ func (i *Inertia) handleScrollProp(c fiber.Ctx, page *PageDTO, key string, prop 
 }
 
 // renderJSON renders the page as JSON for Inertia requests.
-func (i *Inertia) renderJSON(c fiber.Ctx, page *PageDTO) error {
-	js, err := json.Marshal(page)
+func (i *Inertia) RenderHTML(c *State, page *PageDTO) ([]byte, error) {
+	rootTemplate, err := i.RootTemplate()
 	if err != nil {
-		return fmt.Errorf("error marshaling page: %w", err)
+		return nil, err
 	}
-
-	addVaryHeader(c, HeaderInertia)
-	if i.precognitionVary {
-		addVaryHeader(c, HeaderPrecognition)
-	}
-	c.Set(HeaderInertia, "true")
-	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
-
-	return c.Send(js)
-}
-
-// renderHTML renders the page as HTML template.
-func (i *Inertia) renderHTML(c fiber.Ctx, page *PageDTO) error {
-	addVaryHeader(c, HeaderInertia)
-	if i.precognitionVary {
-		addVaryHeader(c, HeaderPrecognition)
-	}
-
-	rootTemplate, err := i.createRootTemplate()
-	if err != nil {
-		return err
-	}
-
-	c.Set(fiber.HeaderContentType, fiber.MIMETextHTMLCharsetUTF8)
 
 	viewData, err := i.createViewData(c)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	viewData["page"] = page
 
 	if i.IsSSREnabled() {
-		ssr, err := i.processSSR(c, page)
+		ssr, err := i.ProcessSSR(c.Context, page)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		viewData["processSSR"] = ssr
 	} else {
@@ -1024,47 +701,14 @@ func (i *Inertia) renderHTML(c fiber.Ctx, page *PageDTO) error {
 	var buf bytes.Buffer
 	err = rootTemplate.Execute(&buf, viewData)
 	if err != nil {
-		return fmt.Errorf("error executing template: %w", err)
+		return nil, fmt.Errorf("error executing template: %w", err)
 	}
 
-	return c.Send(buf.Bytes())
+	return buf.Bytes(), nil
 }
 
-// renderHTMLError renders the page as HTML template.
-func (i *Inertia) renderHTMLError(c fiber.Ctx, appErr *Error, details string) error {
-	tmpl, err := i.createRootErrorTemplate()
-	if err != nil {
-		i.logger.ErrorContext(c, "error creating root error template", "error", err)
-		_ = c.Status(fiber.StatusInternalServerError).SendString("Internal server error")
-		return err
-	}
-
-	appErrCur := ErrNillable
-	if appErr != nil {
-		appErrCur = appErr
-	}
-
-	c.Status(appErrCur.Code)
-	c.Set(fiber.HeaderContentType, fiber.MIMETextHTMLCharsetUTF8)
-	var buf bytes.Buffer
-	data := map[string]any{
-		"code":    appErrCur.Code,
-		"message": appErrCur.Message,
-	}
-	if details != "" {
-		data["details"] = details
-	}
-	err = tmpl.Execute(&buf, data)
-	if err != nil {
-		i.logger.ErrorContext(c, "error executing root error template", "error", err)
-		_ = c.Status(fiber.StatusInternalServerError).SendString("Internal server error")
-		return err
-	}
-
-	return c.Send(buf.Bytes())
-}
-
-func (i *Inertia) createRootTemplate() (*template.Template, error) {
+// RenderHTMLError renders the page as HTML template.
+func (i *Inertia) RootTemplate() (*template.Template, error) {
 	parse := func() (*template.Template, error) {
 		ts := template.New(filepath.Base(i.rootTemplate)).Funcs(i.sharedFuncMap)
 
@@ -1093,7 +737,7 @@ func (i *Inertia) createRootTemplate() (*template.Template, error) {
 	return i.parsedTemplate, i.parsedTemplateErr
 }
 
-func (i *Inertia) createRootErrorTemplate() (*template.Template, error) {
+func (i *Inertia) ErrorTemplate() (*template.Template, error) {
 	parse := func() (*template.Template, error) {
 		ts := template.New(filepath.Base(i.rootErrorTemplate)).Funcs(i.sharedFuncMap)
 
@@ -1122,7 +766,7 @@ func (i *Inertia) createRootErrorTemplate() (*template.Template, error) {
 	return i.parsedErrorTemplate, i.parsedErrorTemplateErr
 }
 
-func (i *Inertia) createViewData(c fiber.Ctx) (map[string]any, error) {
+func (i *Inertia) createViewData(c *State) (map[string]any, error) {
 	viewData := make(map[string]any)
 
 	// Add shared view data
@@ -1131,27 +775,22 @@ func (i *Inertia) createViewData(c fiber.Ctx) (map[string]any, error) {
 	}
 
 	// Add context view data
-	contextViewData := c.Locals(ContextKeyViewData)
-	if contextViewData != nil {
-		contextViewData, ok := contextViewData.(map[string]any)
-		if !ok {
-			return nil, ErrInvalidContextViewData
-		}
-
-		for key, value := range contextViewData {
-			viewData[key] = value
-		}
+	if c.InvalidViewData {
+		return nil, ErrInvalidContextViewData
+	}
+	for key, value := range c.ViewData {
+		viewData[key] = value
 	}
 
 	// Check Vite dev server.
-	if hotURL := i.hotServerURL(); hotURL != "" {
+	if hotURL := i.HotServerURL(); hotURL != "" {
 		viewData["hotServerUrl"] = hotURL
 	}
 
 	return viewData, nil
 }
 
-func (i *Inertia) hotServerURL() string {
+func (i *Inertia) HotServerURL() string {
 	readHotFile := func() string {
 		publicFSRead := os.ReadFile
 		if i.publicFS != nil {
@@ -1174,19 +813,18 @@ func (i *Inertia) hotServerURL() string {
 	return i.hotURL
 }
 
-func (i *Inertia) cacheLazy(c fiber.Ctx, key string, lazy LazyProp) (any, error) {
-	const cacheKey = "__inertia_lazy_cache"
-	cache, _ := c.Locals(cacheKey).(map[string]any)
+func (i *Inertia) cacheLazy(c *State, key string, lazy LazyProp) (any, error) {
+	cache := c.lazyCache
 	if cache == nil {
 		cache = make(map[string]any)
-		c.Locals(cacheKey, cache)
+		c.lazyCache = cache
 	}
 
 	if value, ok := cache[key]; ok {
 		return value, nil
 	}
 
-	result, err := lazy.Fn(c)
+	result, err := lazy.Fn(c.propContext())
 	if err != nil {
 		return nil, err
 	}
@@ -1196,24 +834,20 @@ func (i *Inertia) cacheLazy(c fiber.Ctx, key string, lazy LazyProp) (any, error)
 	return result, nil
 }
 
-func (i *Inertia) resolvePropValue(c fiber.Ctx, key string, value any) (any, error) {
+func (i *Inertia) resolvePropValue(c *State, key string, value any) (any, error) {
 	switch val := value.(type) {
 	case LazyProp:
 		return i.cacheLazy(c, key, val)
 	case func(context.Context) (any, error):
-		return val(c)
+		return val(c.propContext())
 	default:
 		return value, nil
 	}
 }
 
-func (i *Inertia) applyPageMeta(c fiber.Ctx, page *PageDTO) {
-	meta := c.Locals(ContextKeyPageMeta)
-	if meta == nil {
-		return
-	}
-	pm, ok := meta.(*pageMeta)
-	if !ok || pm == nil {
+func (i *Inertia) applyPageMeta(c *State, page *PageDTO) {
+	pm := c.pageMeta
+	if pm == nil {
 		return
 	}
 
@@ -1242,7 +876,7 @@ func (i *Inertia) applyPageMeta(c fiber.Ctx, page *PageDTO) {
 	}
 }
 
-func (i *Inertia) ensureErrorsProp(_ fiber.Ctx, page *PageDTO) {
+func (i *Inertia) ensureErrorsProp(_ *State, page *PageDTO) {
 	if page == nil {
 		return
 	}
@@ -1251,11 +885,11 @@ func (i *Inertia) ensureErrorsProp(_ fiber.Ctx, page *PageDTO) {
 	}
 }
 
-func (i *Inertia) applyErrorBag(c fiber.Ctx, page *PageDTO) {
+func (i *Inertia) applyErrorBag(c *State, page *PageDTO) {
 	if page == nil {
 		return
 	}
-	bag := strings.TrimSpace(c.Get(HeaderErrorBag))
+	bag := strings.TrimSpace(c.Meta.ErrorBag)
 	if bag == "" {
 		return
 	}
@@ -1268,7 +902,7 @@ func (i *Inertia) applyErrorBag(c fiber.Ctx, page *PageDTO) {
 	page.Props[ContextPropsErrors] = map[string]map[string]string{bag: flat}
 }
 
-func (i *Inertia) isExternalRedirect(target string) bool {
+func (i *Inertia) IsExternalRedirect(target string) bool {
 	parsed, err := url.Parse(target)
 	if err != nil || (parsed.Scheme == "" && parsed.Host == "") {
 		return false
@@ -1281,4 +915,46 @@ func (i *Inertia) isExternalRedirect(target string) bool {
 		parsed.Scheme = base.Scheme
 	}
 	return !strings.EqualFold(base.Scheme, parsed.Scheme) || !strings.EqualFold(base.Host, parsed.Host)
+}
+
+func (p *partialConfig) shouldIncludeProp(key string) bool {
+	if p == nil {
+		return true
+	}
+	if _, ok := p.forceInclude[key]; ok {
+		return true
+	}
+	if !p.isPartial {
+		return true
+	}
+	if p.hasExclude {
+		if p.exclude == nil {
+			return true
+		}
+		_, excluded := p.exclude[key]
+		return !excluded
+	}
+	if p.hasInclude {
+		if p.include == nil {
+			return false
+		}
+		_, included := p.include[key]
+		return included
+	}
+	return true
+}
+
+// NormalizeConfig applies template defaults after adapter options. Call only before serving.
+func (i *Inertia) NormalizeConfig() {
+	if i.rootHotTemplate == "" {
+		i.rootHotTemplate = "hot"
+	}
+
+	if i.rootTemplate == "" {
+		i.rootTemplate = "app.gohtml"
+	}
+
+	if i.rootErrorTemplate == "" {
+		i.rootErrorTemplate = "error.gohtml"
+	}
 }

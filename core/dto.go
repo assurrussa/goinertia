@@ -1,4 +1,4 @@
-package goinertia
+package core
 
 // PageDTO type.
 type PageDTO struct {

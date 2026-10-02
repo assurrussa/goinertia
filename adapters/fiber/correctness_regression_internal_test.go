@@ -1,4 +1,4 @@
-package goinertia
+package fiberadapter
 
 import (
 	"context"
@@ -12,10 +12,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/session"
+	"github.com/stretchr/testify/require"
+
+	"github.com/assurrussa/goinertia/core"
 	"github.com/assurrussa/goinertia/inertiat/fibert"
 	"github.com/assurrussa/goinertia/views"
-	"github.com/gofiber/fiber/v3"
-	"github.com/stretchr/testify/require"
 )
 
 func TestSSRDefaultOwnedBodyAndCancellation(t *testing.T) {
@@ -31,7 +34,7 @@ func TestSSRDefaultOwnedBodyAndCancellation(t *testing.T) {
 		_, _ = fmt.Fprintf(w, `{"body":"%d","head":[]}`, sequence.Add(1))
 	}))
 	defer server.Close()
-	client := &defaultSSRClient{client: &http.Client{}}
+	client := core.NewSSRClient(&http.Client{})
 	_, owned, err := client.Post(t.Context(), server.URL, nil, nil)
 	require.NoError(t, err)
 	saved := string(owned)
@@ -106,17 +109,22 @@ func TestCheckerOnlyCSRFAndVary(t *testing.T) {
 	t.Parallel()
 	blocked := errors.New("blocked")
 	var checked atomic.Int64
-	inr := New("http://localhost", WithAssetVersion("v1"), WithCSRFTokenCheckProvider(func(_ fiber.Ctx) error { checked.Add(1); return blocked }))
+	inr := New("http://localhost",
+		WithAssetVersion("v1"),
+		WithCSRFTokenCheckProvider(func(_ fiber.Ctx) error {
+			checked.Add(1)
+			return blocked
+		}))
 	app := fiber.New()
 	app.Use(inr.Middleware())
 	app.Post("/", func(c fiber.Ctx) error { return c.SendString("should not run") })
 	app.Get("/", func(c fiber.Ctx) error { return c.SendString("ok") })
-	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/", nil))
+	resp, err := app.Test(httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil))
 	require.NoError(t, err)
 	require.Equal(t, int64(1), checked.Load())
 	_ = resp.Body.Close()
 	for _, version := range []string{"", "v1"} {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 		if version != "" {
 			req.Header.Set(HeaderInertia, "true")
 			req.Header.Set(HeaderVersion, "old")
@@ -169,6 +177,36 @@ func TestExplicitSessionOwnership(t *testing.T) {
 	require.Equal(t, 4, sess.released)
 }
 
+func TestRawFiberStoreOwnership(t *testing.T) {
+	t.Parallel()
+	adapter := NewFiberSessionAdapter(session.NewStore())
+	require.NotNil(t, adapter.release)
+	actualRelease := adapter.release
+	releases := 0
+	adapter.release = func(value *session.Session) {
+		releases++
+		actualRelease(value)
+	}
+	c := fibert.Default()
+	_, err := adapter.Get(c, "auth")
+	require.NoError(t, err)
+	require.NoError(t, adapter.Set(c, "auth", true))
+	value, err := adapter.Get(c, "auth")
+	require.NoError(t, err)
+	require.Equal(t, true, value)
+	require.NoError(t, adapter.Delete(c, "auth"))
+	// Gob cannot encode channels; the acquired raw session must still release.
+	require.Error(t, adapter.Set(c, "bad", make(chan int)))
+	require.NoError(t, adapter.Flash(c, "message", "saved"))
+	value, err = adapter.GetFlash(c, "message")
+	require.NoError(t, err)
+	require.Equal(t, "saved", value)
+	value, err = adapter.GetFlash(c, "message")
+	require.NoError(t, err)
+	require.Nil(t, value)
+	require.Equal(t, 8, releases)
+}
+
 func TestDirectHTMLVaryAndConflictNoCache(t *testing.T) {
 	t.Parallel()
 	i := New("https://app.example", WithFS(views.Templates), WithAssetVersion("v1"))
@@ -187,4 +225,18 @@ func TestDirectHTMLVaryAndConflictNoCache(t *testing.T) {
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusConflict, resp.StatusCode)
 	require.Equal(t, "no-cache", resp.Header.Get("Cache-Control"))
+}
+
+func TestLegacyMetadataLocalKey(t *testing.T) {
+	t.Parallel()
+	i := NewLegacy("https://app.example")
+	c := fibert.Default()
+	i.WithEncryptHistory(c)
+	opaque := c.Locals(ContextKeyPageMeta)
+	require.NotNil(t, opaque)
+	other := fibert.Default()
+	other.Locals(ContextKeyPageMeta, opaque)
+	page, err := i.buildPage(other, "Page", nil)
+	require.NoError(t, err)
+	require.True(t, page.EncryptHistory)
 }

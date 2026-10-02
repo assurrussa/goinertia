@@ -14,3 +14,6 @@
 - [Shared lazy props](shared-lazy.md)
 - [SSR configuration](ssr.md)
 - [Uploads](uploads.md)
+
+- [Native adapters and compatibility](adapters.md)
+- [Adapter comparison benchmarks](benchmarks.md)

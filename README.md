@@ -5,7 +5,7 @@
 [![Go](https://github.com/assurrussa/goinertia/actions/workflows/go.yml/badge.svg)](https://github.com/assurrussa/goinertia/actions/workflows/go.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**The Fiber-first adapter for Inertia.js.**
+**Inertia.js for Go, with a neutral core and native Fiber/net/http adapters.**
 
 `goinertia` allows you to build modern single-page apps
 using [Vue.js](https://vuejs.org/), [React](https://reactjs.org/), or [Svelte](https://svelte.dev/) while keeping
@@ -19,7 +19,7 @@ Visit:
 
 ## Features
 
-- **⚡️ Fiber Native**: Built specifically for the Fiber web framework (v3).
+- **⚡️ Native adapters**: Fiber v3 and net/http lifecycles, with compatible Fiber root imports.
 - **🔄 Full Protocol Support**: Implements the complete Inertia.js spec.
     - **Asset Versioning**: Auto-reloads assets when versions change.
     - **Partial Reloads**: Only fetch the data you need.
@@ -81,6 +81,17 @@ func main() {
 	app.Listen(":3000")
 }
 ```
+
+## Native adapters and compatibility
+
+Existing root imports preserve the Fiber API, including lazy callbacks that
+receive `fiber.Ctx`. New applications can use `adapters/fiber` for lifecycle
+context callbacks or `adapters/nethttp` for native `http.Handler` integration.
+The shared `core` package contains request state, page/props, templates, assets
+and SSR policy. This is one Go module with a Go 1.26 baseline.
+
+See [adapter setup, context and session ownership](docs/adapters.md) and
+[reproducible benchmark comparisons](docs/benchmarks.md).
 
 ## Core Concepts
 

@@ -19,3 +19,8 @@ func ProcessAction(c fiber.Ctx, inertia *goinertia.Inertia) error {
     return inertia.RedirectBack(c)
 }
 ```
+
+Raw Fiber Store sessions are released by NewFiberSessionAdapter. Custom raw
+stores can use NewFiberSessionAdapterWithRelease. For session middleware, use
+MiddlewareSessionAdapter{}; its middleware owns save/release. Custom
+SessionStore bridges keep their own ownership. See [adapters](adapters.md).

@@ -1,10 +1,8 @@
-package goinertia
+package core
 
 import (
 	"errors"
-
-	"github.com/gofiber/fiber/v3"
-	"github.com/gofiber/utils/v2"
+	"net/http"
 )
 
 var (
@@ -20,7 +18,7 @@ type ValidationErrors map[string][]string
 
 var (
 	ErrNillable = NewError(500, "inertia: value is nil")
-	ErrInternal = NewError(fiber.StatusInternalServerError, utils.StatusMessage(fiber.StatusInternalServerError))
+	ErrInternal = NewError(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 )
 
 // Error represents an error that occurred while handling a request.
@@ -45,7 +43,7 @@ func (e *Error) Unwrap() error {
 func NewError(code int, message string, errs ...error) *Error {
 	err := &Error{
 		Code:    code,
-		Message: utils.StatusMessage(code),
+		Message: http.StatusText(code),
 	}
 
 	if message != "" {
@@ -130,3 +128,6 @@ func NewValidationError(code int, userMessage string, errs ValidationErrors) *Va
 
 func (e *ValidationError) Error() string            { return e.message }
 func (e *ValidationError) Errors() ValidationErrors { return e.errs }
+
+// StatusCode returns the validation response status.
+func (e *ValidationError) StatusCode() int { return e.code }

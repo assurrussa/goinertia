@@ -1,4 +1,4 @@
-package goinertia
+package fiberadapter
 
 import (
 	"context"
@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/assurrussa/goinertia/core"
 	"github.com/assurrussa/goinertia/inertiat/fibert"
 	"github.com/assurrussa/goinertia/testdata"
 	"github.com/assurrussa/goinertia/views"
@@ -56,9 +57,9 @@ func TestInertia_TemplateError_RootTmplFSError(t *testing.T) {
 	t.Parallel()
 
 	inrt := New("http://localhost:3000")
-	inrt.templateFS = nil
-	inrt.rootTemplate = ""
-	inrt.rootErrorTemplate = ""
+	core.WithFS(nil)(inrt.Inertia)
+	core.WithRootTemplate("")(inrt.Inertia)
+	core.WithRootErrorTemplate("")(inrt.Inertia)
 
 	tmpl, err := inrt.createRootTemplate()
 	require.Error(t, err)
@@ -75,13 +76,13 @@ func TestInertia_TemplateError_RootTmplFSError(t *testing.T) {
 
 	// To test successful initialization, we must use a new instance because sync.Once is already done.
 	inrt2 := New("http://localhost:3000")
-	inrt2.templateFS = views.Templates
-	inrt2.rootTemplate = ""
+	core.WithFS(views.Templates)(inrt2.Inertia)
+	core.WithRootTemplate("")(inrt2.Inertia)
 	tmpl, err = inrt2.createRootTemplate()
 	require.Error(t, err)
 	assert.Nil(t, tmpl)
 
-	inrt2.rootErrorTemplate = ""
+	core.WithRootErrorTemplate("")(inrt2.Inertia)
 	tmpl, err = inrt2.createRootErrorTemplate()
 	require.Error(t, err)
 	assert.Nil(t, tmpl)
@@ -131,8 +132,8 @@ func TestInertia_TemplateError(t *testing.T) {
 	t.Parallel()
 
 	inrt := New("http://localhost:3000")
-	inrt.templateFS = nil
-	inrt.rootTemplate = ""
+	core.WithFS(nil)(inrt.Inertia)
+	core.WithRootTemplate("")(inrt.Inertia)
 
 	app := fiber.New()
 

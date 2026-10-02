@@ -1,4 +1,4 @@
-package goinertia
+package core
 
 import (
 	"context"
