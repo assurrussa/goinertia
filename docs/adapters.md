@@ -94,6 +94,20 @@ props, view data and page metadata added through the embedded core API. Flash,
 old input and validation errors added through that API also persist on redirects
 and Inertia location conflicts, with the same consume-once session policy.
 
+State and Locals share synchronized map bindings. In-place additions, updates
+and deletions are visible through both. Replacing or clearing `State.Props` or
+`State.ViewData` takes effect on the next State/helper/render/redirect access;
+stale Locals do not restore deleted data. A Locals replacement is adopted when
+State's corresponding binding has not changed. If both bindings are replaced
+between accesses, State takes precedence. Opaque page metadata follows the same
+rule. No map contents are copied or merged to reconcile these bindings.
+
+Lifecycle context synchronization is separate. An unchanged context keeps its
+typed helper wrapper; an actual context change creates an immutable snapshot,
+preserving contexts already passed to callbacks. Legacy callbacks still receive
+the actual Fiber context. `WithViewData` restores valid view data after an
+invalid value, consistent with the compatibility helper's previous behavior.
+
 ## Fiber session ownership
 
 `NewFiberSessionAdapter` recognizes Fiber's raw `*session.Store` and releases

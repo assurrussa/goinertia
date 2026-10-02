@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/goccy/go-json"
@@ -85,6 +86,29 @@ type (
 	stateKey        struct{}
 )
 
+// Retain the last synchronized map bindings, not copies of their contents.
+// Rebinding State (including assigning nil) takes precedence over stale Locals;
+// a changed Locals binding is adopted when State's binding is unchanged.
+type requestState struct {
+	core.State
+	initialContext lifecycleContext
+	props, view    map[string]any
+	invalidView    bool
+	pageMeta       any
+}
+
+type lifecycleContext struct {
+	context.Context //nolint:containedctx // Immutable adapter-owned request lifecycle snapshot.
+	fiber           fiber.Ctx
+}
+
+func (c *lifecycleContext) Value(key any) any {
+	if _, ok := key.(fiberContextKey); ok {
+		return c.fiber
+	}
+	return c.Context.Value(key)
+}
+
 // Context returns the lifecycle context with a typed Fiber helper. The helper
 // may only be used during this request; Fiber contexts are pooled.
 func Context(c fiber.Ctx) context.Context {
@@ -121,24 +145,87 @@ func RequestMeta(c fiber.Ctx) core.RequestMeta {
 }
 
 func (i *Inertia) state(c fiber.Ctx) *core.State {
-	s, ok := c.Locals(stateKey{}).(*core.State)
-	switch {
-	case !ok:
+	s, ok := c.Locals(stateKey{}).(*requestState)
+	if !ok {
+		s = &requestState{}
 		if i.legacy {
-			s = core.NewLegacyState(c.Context(), c, RequestMeta(c))
+			s.State = *core.NewLegacyState(c.Context(), c, RequestMeta(c))
 		} else {
-			s = core.NewState(Context(c), RequestMeta(c))
+			s.initialContext = lifecycleContext{Context: c.Context(), fiber: c}
+			s.State = *core.NewState(&s.initialContext, RequestMeta(c))
 		}
+		i.readLocalState(c, &s.State)
+		s.captureBindings()
 		c.Locals(stateKey{}, s)
-	case i.legacy:
-		// Downstream middleware may replace the lifecycle context after State
-		// was first obtained. Keep the historical Fiber callback context intact.
-		s.Context = c.Context()
-	default:
-		s.Context = Context(c)
+	} else {
+		i.refreshContext(c, &s.State)
+		i.reconcileState(c, s)
 	}
-	i.readLocalState(c, s)
-	return s
+	return &s.State
+}
+
+func (i *Inertia) refreshContext(c fiber.Ctx, s *core.State) {
+	current := c.Context()
+	if i.legacy {
+		s.Context = current
+		return
+	}
+	previous, ok := s.Context.(*lifecycleContext)
+	// Custom contexts need not be comparable. Refresh those conservatively.
+	if ok && reflect.TypeOf(current).Comparable() && previous.Context == current {
+		return
+	}
+	// Keep contexts already passed to callbacks immutable and safe to read.
+	s.Context = &lifecycleContext{Context: current, fiber: c}
+}
+
+func sameMap(left, right map[string]any) bool {
+	return reflect.ValueOf(left).Pointer() == reflect.ValueOf(right).Pointer()
+}
+
+func (s *requestState) captureBindings() {
+	s.props, s.view = s.Props, s.ViewData
+	s.invalidView = s.InvalidViewData
+	s.pageMeta = s.LegacyPageMeta()
+}
+
+func (i *Inertia) reconcileState(c fiber.Ctx, s *requestState) {
+	localProps, _ := c.Locals(ContextKeyProps).(map[string]any)
+	switch {
+	case !sameMap(s.Props, s.props):
+		c.Locals(ContextKeyProps, s.Props)
+	case !sameMap(localProps, s.props):
+		s.Props = localProps
+	}
+	localView, valid := c.Locals(ContextKeyViewData).(map[string]any)
+	invalid := c.Locals(ContextKeyViewData) != nil && !valid
+	switch {
+	case !sameMap(s.ViewData, s.view) || s.InvalidViewData != s.invalidView:
+		i.syncViewData(c, &s.State)
+	case !sameMap(localView, s.view) || invalid != s.invalidView:
+		s.ViewData, s.InvalidViewData = localView, invalid
+	}
+	// Normalize opaque legacy metadata before comparison; invalid Locals values
+	// may be uncomparable, whereas LegacyPageMeta returns only a pointer or nil.
+	var local core.State
+	local.SetLegacyPageMeta(c.Locals(ContextKeyPageMeta))
+	switch {
+	case s.LegacyPageMeta() != s.pageMeta:
+		c.Locals(ContextKeyPageMeta, s.LegacyPageMeta())
+	case local.LegacyPageMeta() != s.pageMeta:
+		s.SetLegacyPageMeta(local.LegacyPageMeta())
+	}
+	s.captureBindings()
+}
+
+func (i *Inertia) syncViewData(c fiber.Ctx, s *core.State) {
+	if !s.InvalidViewData {
+		c.Locals(ContextKeyViewData, s.ViewData)
+	} else if _, valid := c.Locals(ContextKeyViewData).(map[string]any); valid || c.Locals(ContextKeyViewData) == nil {
+		// Preserve the invalid-data error when State marks otherwise valid Locals
+		// as invalid. Existing malformed values can remain in place.
+		c.Locals(ContextKeyViewData, struct{}{})
+	}
 }
 
 // Prop mutation needs only Locals. Full metadata/context ownership is captured
@@ -164,15 +251,19 @@ func (i *Inertia) readViewData(c fiber.Ctx, s *core.State) {
 // Reuse native state when it is installed. Legacy helper-only requests keep
 // their lightweight Locals path without capturing metadata or context.
 func (i *Inertia) mutationState(c fiber.Ctx, local *core.State) *core.State {
-	if s, ok := c.Locals(stateKey{}).(*core.State); ok {
-		i.readLocalState(c, s)
-		return s
+	if s, ok := c.Locals(stateKey{}).(*requestState); ok {
+		i.reconcileState(c, s)
+		return &s.State
 	}
 	i.readLocalState(c, local)
 	return local
 }
 
 func (i *Inertia) syncState(c fiber.Ctx, s *core.State) {
+	if saved, ok := c.Locals(stateKey{}).(*requestState); ok {
+		i.reconcileState(c, saved)
+		return
+	}
 	if meta := s.LegacyPageMeta(); meta != nil {
 		c.Locals(ContextKeyPageMeta, meta)
 	}
@@ -238,7 +329,11 @@ func parseHeaderList(value string) map[string]struct{} {
 func (i *Inertia) renderHTML(c fiber.Ctx, s *core.State, page *PageDTO) error {
 	i.applyVary(c)
 	// Legacy callbacks may write view data directly to Locals while building props.
-	i.readViewData(c, s)
+	if saved, ok := c.Locals(stateKey{}).(*requestState); ok {
+		i.reconcileState(c, saved)
+	} else {
+		i.readViewData(c, s)
+	}
 	data, err := i.RenderHTML(s, page)
 	if err != nil {
 		return err

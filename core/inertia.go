@@ -165,6 +165,7 @@ func (i *Inertia) WithViewData(c *State, key string, value any) {
 
 	data[key] = value
 	c.ViewData = data
+	c.InvalidViewData = false
 }
 
 // WithFlashMessages adds flashes messages.
