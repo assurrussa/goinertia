@@ -94,6 +94,8 @@ props, view data and page metadata added through the embedded core API. Flash,
 old input and validation errors added through that API also persist on redirects
 and Inertia location conflicts, with the same consume-once session policy.
 
+Each Fiber manager owns its request State and callback/lazy cache lifecycle;
+legacy and native managers cannot reuse each other's callback contexts.
 State and Locals share synchronized map bindings. In-place additions, updates
 and deletions are visible through both. Replacing or clearing `State.Props` or
 `State.ViewData` takes effect on the next State/helper/render/redirect access;

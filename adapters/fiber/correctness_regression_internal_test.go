@@ -247,7 +247,7 @@ func TestPropsBeforeAndAfterNativeState(t *testing.T) {
 	c := fibert.Default()
 	i.WithProp(c, "first", "before")
 	i.WithEncryptHistory(c)
-	require.Nil(t, c.Locals(stateKey{}), "props alone must not capture protocol metadata")
+	require.Nil(t, c.Locals(stateKey{owner: i}), "props alone must not capture protocol metadata")
 	s := i.State(c)
 	require.Equal(t, "before", s.Props["first"])
 	i.WithFlashSuccess(c, "saved")

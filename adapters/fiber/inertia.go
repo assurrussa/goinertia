@@ -83,7 +83,7 @@ func validate(i *Inertia) (*Inertia, error) {
 
 type (
 	fiberContextKey struct{}
-	stateKey        struct{}
+	stateKey        struct{ owner *Inertia }
 )
 
 // Retain the last synchronized map bindings, not copies of their contents.
@@ -145,7 +145,7 @@ func RequestMeta(c fiber.Ctx) core.RequestMeta {
 }
 
 func (i *Inertia) state(c fiber.Ctx) *core.State {
-	s, ok := c.Locals(stateKey{}).(*requestState)
+	s, ok := c.Locals(stateKey{owner: i}).(*requestState)
 	if !ok {
 		s = &requestState{}
 		if i.legacy {
@@ -156,7 +156,7 @@ func (i *Inertia) state(c fiber.Ctx) *core.State {
 		}
 		i.readLocalState(c, &s.State)
 		s.captureBindings()
-		c.Locals(stateKey{}, s)
+		c.Locals(stateKey{owner: i}, s)
 	} else {
 		i.refreshContext(c, &s.State)
 		i.reconcileState(c, s)
@@ -251,7 +251,7 @@ func (i *Inertia) readViewData(c fiber.Ctx, s *core.State) {
 // Reuse native state when it is installed. Legacy helper-only requests keep
 // their lightweight Locals path without capturing metadata or context.
 func (i *Inertia) mutationState(c fiber.Ctx, local *core.State) *core.State {
-	if s, ok := c.Locals(stateKey{}).(*requestState); ok {
+	if s, ok := c.Locals(stateKey{owner: i}).(*requestState); ok {
 		i.reconcileState(c, s)
 		return &s.State
 	}
@@ -260,7 +260,7 @@ func (i *Inertia) mutationState(c fiber.Ctx, local *core.State) *core.State {
 }
 
 func (i *Inertia) syncState(c fiber.Ctx, s *core.State) {
-	if saved, ok := c.Locals(stateKey{}).(*requestState); ok {
+	if saved, ok := c.Locals(stateKey{owner: i}).(*requestState); ok {
 		i.reconcileState(c, saved)
 		return
 	}
@@ -329,7 +329,7 @@ func parseHeaderList(value string) map[string]struct{} {
 func (i *Inertia) renderHTML(c fiber.Ctx, s *core.State, page *PageDTO) error {
 	i.applyVary(c)
 	// Legacy callbacks may write view data directly to Locals while building props.
-	if saved, ok := c.Locals(stateKey{}).(*requestState); ok {
+	if saved, ok := c.Locals(stateKey{owner: i}).(*requestState); ok {
 		i.reconcileState(c, saved)
 	} else {
 		i.readViewData(c, s)
