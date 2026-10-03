@@ -42,7 +42,7 @@ npm test
 Repeat the build/test commands for `FRAMEWORK=react` and `INERTIA_VERSION=2.3.18`,
 or run `make browser` at the repository root after installing Chromium. The Go
 workflow has four independently reported matrix jobs. Each runs all four
-transport/bootstrap combinations, for 24 browser scenarios per job (96 total).
+transport/bootstrap combinations, for 28 browser scenarios per job (112 total).
 Failures preserve Playwright traces/reports in CI artifacts. Retries are disabled.
 The servers bind to loopback only and use disposable, random-cookie test sessions.
 Do not expose this fixture as a production application.
@@ -56,7 +56,8 @@ Covered flows:
 - `useForm` validation errors, corrected resubmission and write redirects.
 - Native `page.flash`, `onFlash` and global flash event; legacy `props.flash`
   coexistence; native history stripping and legacy history preservation;
-  session consume-once behavior on reload.
+  session consume-once behavior on reload; explicit version-specific native flash
+  handling on ordinary partial reloads (2.3.18 retains, 2.3.28 clears omitted data).
 
 The fixture SSR renderer uses the actual framework `renderToString` and Inertia
 `createInertiaApp`. The Go engine calls it through its normal SSR transport.

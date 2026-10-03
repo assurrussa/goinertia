@@ -56,10 +56,12 @@ JSON responses and SSR receive the same native flash and scroll-reset metadata.
 
 The pinned official **v2.3.18 and v2.3.28** clients understand `page.flash`,
 provide `onFlash`/`flash` event handling and strip native flash from browser
-history. They shallow-merge native flash on same-component partial visits;
-automatic deferred requests retain the current flash without applying incoming
-flash. This means a visible message can remain through a partial reload; the
-server does not resend consumed session data. Full visits and Back/Forward are
+history. The pinned clients differ on ordinary same-component partial visits:
+2.3.18 shallow-merges native flash, while 2.3.28 replaces it with the response
+flash (an omitted field clears it). Both retain the current flash on automatic
+deferred requests without applying incoming flash. A visible message can thus
+remain through a partial reload in 2.3.18; the server does not resend consumed
+session data. The browser matrix asserts each version's behavior. Full visits and Back/Forward are
 subject to the client's own flash/history handling. See the pinned
 [v2.3.18 page/history code](https://github.com/inertiajs/inertia/blob/v2.3.18/packages/core/src/page.ts),
 [v2.3.28 page/history code](https://github.com/inertiajs/inertia/blob/v2.3.28/packages/core/src/page.ts),

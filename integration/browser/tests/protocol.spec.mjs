@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+const matrix = JSON.parse(readFileSync(new URL('../dist/matrix.json', import.meta.url), 'utf8'))
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -108,4 +110,13 @@ test('initial native flash survives SSR/CSR bootstrap but not Back restoration',
   await expect(page.locator('#title')).toHaveText('Second')
   await page.goBack()
   await expect(page.locator('#native-flash')).toHaveText('')
+})
+
+
+test('native flash follows the pinned client partial-reload contract', async ({ page }) => {
+  await page.goto('/native')
+  await expect(page.locator('#native-flash')).toHaveText('Native saved')
+  await page.locator('#more').click()
+  await expect(page.locator('#items')).toHaveText('[1,2]')
+  await expect(page.locator('#native-flash')).toHaveText(matrix.version === '2.3.18' ? 'Native saved' : '')
 })
