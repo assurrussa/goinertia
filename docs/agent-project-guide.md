@@ -82,6 +82,8 @@ templates and rereads the Vite hot file on each request.
 
 Use examples as integration references:
 
+- `examples/v3-app`: explicit Inertia v3, native Fiber/net/http, Vue/React,
+  CSR/real SSR; see its README for exact build and run commands.
 - `examples/basic-app`: Fiber + Vue + no SSR.
 - `examples/basic-app-ssr`: Fiber + Vue + SSR endpoint.
 - `examples/basic-app-react`: Fiber + React + no SSR.
