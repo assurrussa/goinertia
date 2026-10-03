@@ -23,6 +23,8 @@ type State struct {
 	pageMeta                   *pageMeta
 	lazyCache                  map[lazyCacheKey]any
 	propSource                 propSource
+	propMetadata               map[propMetadataLabel][]string
+	nestedMergeRoots           map[string]bool
 	legacyContext              context.Context //nolint:containedctx // Compatibility callback context is request-local.
 }
 

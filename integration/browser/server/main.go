@@ -123,6 +123,15 @@ func newFiber(cfg config) (*fiber.App, error) {
 	app.Get("/feed", func(c fiber.Ctx) error {
 		return manager.Render(c, "Home", homeProps(cfg.adapter, c.Query("page"), false))
 	})
+	app.Get("/props", func(c fiber.Ctx) error {
+		return manager.Render(c, "Props", onceProps(cfg.adapter, c.Query("step"), false, c.Query("fresh") == "1"))
+	})
+	app.Get("/props-renamed", func(c fiber.Ctx) error {
+		return manager.Render(c, "PropsRenamed", onceProps(cfg.adapter, c.Query("step"), true, false))
+	})
+	app.Get("/nested", func(c fiber.Ctx) error {
+		return manager.Render(c, "Nested", nestedProps(cfg.adapter, c.Query("step")))
+	})
 	app.Get("/second", func(c fiber.Ctx) error {
 		return manager.Render(c, "Second", pageProps(cfg.adapter, "Second"))
 	})
@@ -169,6 +178,16 @@ func newHTTP(cfg config) (http.Handler, error) {
 	}))
 	pages.Handle("GET /feed", manager.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		return manager.Render(w, r, "Home", homeProps(cfg.adapter, r.URL.Query().Get("page"), false))
+	}))
+	pages.Handle("GET /props", manager.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		props := onceProps(cfg.adapter, r.URL.Query().Get("step"), false, r.URL.Query().Get("fresh") == "1")
+		return manager.Render(w, r, "Props", props)
+	}))
+	pages.Handle("GET /props-renamed", manager.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		return manager.Render(w, r, "PropsRenamed", onceProps(cfg.adapter, r.URL.Query().Get("step"), true, false))
+	}))
+	pages.Handle("GET /nested", manager.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		return manager.Render(w, r, "Nested", nestedProps(cfg.adapter, r.URL.Query().Get("step")))
 	}))
 	pages.Handle("GET /second", manager.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		return manager.Render(w, r, "Second", pageProps(cfg.adapter, "Second"))

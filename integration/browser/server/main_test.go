@@ -22,13 +22,16 @@ import (
 const fixtureURL = "http://127.0.0.1:18984"
 
 type fixturePage struct {
-	Component     string              `json:"component"`
-	Props         map[string]any      `json:"props"`
-	URL           string              `json:"url"`
-	Version       string              `json:"version"`
-	Flash         map[string]any      `json:"flash"`
-	DeferredProps map[string][]string `json:"deferredProps"`
-	MergeProps    []string            `json:"mergeProps"`
+	Component     string                         `json:"component"`
+	Props         map[string]any                 `json:"props"`
+	URL           string                         `json:"url"`
+	Version       string                         `json:"version"`
+	Flash         map[string]any                 `json:"flash"`
+	DeferredProps map[string][]string            `json:"deferredProps"`
+	MergeProps    []string                       `json:"mergeProps"`
+	PrependProps  []string                       `json:"prependProps"`
+	MatchPropsOn  []string                       `json:"matchPropsOn"`
+	OnceProps     map[string]core.OncePropConfig `json:"onceProps"`
 }
 
 type fixtureResponse struct {
