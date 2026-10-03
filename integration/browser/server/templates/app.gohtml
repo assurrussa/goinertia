@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <link rel="icon" href="data:,">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {{ if .processSSR }}{{ range .processSSR.Head }}{{ raw . }}{{ end }}{{ end }}
+    <script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+{{ if .processSSR }}
+    {{ raw .processSSR.Body }}
+{{ else }}
+    <div id="app" data-page="{{ marshal .pageJSON }}"></div>
+{{ end }}
+</body>
+</html>
