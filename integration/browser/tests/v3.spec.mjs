@@ -12,6 +12,16 @@ async function visit(page, url, options = {}) {
 }
 const metadata = async (page) => JSON.parse(await page.locator('#page-meta').textContent())
 
+async function expectManagedTitle(page, title) {
+  // Playwright 1.58's text matcher intentionally skips every element in <head>.
+  // Check the actual node property and document title without losing ownership
+  // or deduplication assertions.
+  await expect(page.locator('head title')).toHaveCount(1)
+  await expect(page.locator('head title[data-inertia]')).toHaveCount(1)
+  await expect(page.locator('head title[data-inertia]')).toHaveJSProperty('textContent', title)
+  await expect(page).toHaveTitle(title)
+}
+
 test('script bootstrap safely round-trips script terminators, Unicode and JSON characters', async ({ page, request }, info) => {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
@@ -21,8 +31,7 @@ test('script bootstrap safely round-trips script terminators, Unicode and JSON c
   expect(html).not.toContain('<script>window.__injected = true</script>')
   expect(html).not.toMatch(/<div[^>]+data-page=/)
   await ready(page, '/v3/unsafe')
-  await expect(page.locator('head title[data-inertia]')).toHaveCount(1)
-  await expect(page.locator('head title[data-inertia]')).toHaveText('Safe bootstrap')
+  await expectManagedTitle(page, 'Safe bootstrap')
   expect((await propState(page)).unsafe).toBe('</script><script>window.__injected = true</script>&"雪\u2028\u2029')
   expect(await page.evaluate(() => window.__injected)).toBeUndefined()
   await expect(page.locator('html')).toHaveAttribute('data-mode', info.project.metadata.ssr ? 'hydrated' : 'mounted')
@@ -40,8 +49,7 @@ test('409 X-Inertia-Redirect makes a fresh GET and preserves fragments without d
   expect(response.headers()['x-inertia']).toBeUndefined()
   await expect(page).toHaveURL(/\/second#destination$/)
   await expect(page.locator('#title')).toHaveText('Second')
-  await expect(page.locator('head title[data-inertia]')).toHaveCount(1)
-  await expect(page.locator('head title[data-inertia]')).toHaveText('Second')
+  await expectManagedTitle(page, 'Second')
   expect(await page.evaluate(() => window.__documentMarker)).toBe(marker)
   await page.goBack()
   await expect(page).toHaveURL(/\/form$/)
