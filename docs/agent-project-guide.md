@@ -14,9 +14,9 @@ The module path is `github.com/assurrussa/goinertia`. The current Go module
 targets Go `1.26` and Fiber `v3.3.0`.
 
 The architecture decision retains the neutral core and both native lifecycles.
-The compatible wire contract is a documented Inertia v2.x subset; current
-official documentation targets v3. Read [protocol coverage](protocol-coverage.md)
-before claiming full protocol/client compatibility. The separate
+The default wire contract is the compatible Inertia v2.x subset. An explicit
+ProtocolV3 profile targets Inertia 3.8.0; read [v3](inertia-v3.md) and
+[protocol coverage](protocol-coverage.md) before making compatibility claims. The separate
 `integration/nethttp-consumer` module validates the public HTTP API and its compiled
 dependency graph without root/Fiber imports. `make check` and the Go workflow
 run it and the pinned Node 24 client replay explicitly. The separate

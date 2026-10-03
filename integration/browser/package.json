@@ -5,7 +5,9 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "playwright test",
-    "pretest": "go build -o dist/browser-server ./server"
+    "pretest": "go build -o dist/browser-server ./server",
+    "matrix": "node matrix.mjs",
+    "verify:ssr": "node verify-ssr.mjs"
   },
   "dependencies": {
     "@inertiajs/react": "2.3.28",

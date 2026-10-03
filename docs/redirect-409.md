@@ -75,3 +75,42 @@ When the user clicks a link that triggers the `HandleNotFound` logic:
 1. The server responds with `302` (or `303` for non‑GET).
 2. The Inertia client follows the redirect.
 3. The target page is rendered with the flash error prop populated from the session.
+
+## Opt-in v3 transport
+
+With `WithProtocolVersion(ProtocolV3)`, asset-version conflicts additionally
+return the current `X-Inertia-Version`. This lets the v3 client identify an asset
+change on a background request. V2 retains its previous headers.
+
+Inertia redirects whose target contains `#` become an empty `409` response with
+`X-Inertia-Redirect: <target>`, so the client can issue a GET visit without losing
+the fragment. Both native adapters apply this to their redirect helpers and to
+ordinary HTTP redirect responses passing through middleware. Prefetch requests
+(`Purpose`, `Sec-Purpose`, or `X-Moz` containing `prefetch`) retain normal redirect
+semantics. Explicit external redirects continue to use `X-Inertia-Location`.
+Flash data is persisted for both forms of 409 navigation.
+
+Use `manager.WithPreserveFragment(c, true)` in Fiber or
+`manager.WithPreserveFragment(nethttp.State(r), true)` in native HTTP to emit the
+v3 `preserveFragment` page metadata. It preserves the incoming visit's fragment
+when the response URL changes. No fragment is available in ordinary incoming
+HTTP URLs; this is a client-side instruction. The option is request-local, has
+no effect in v2, and leaves `PageDTO`'s field layout unchanged.
+
+### Error statuses
+
+Use `RenderWithStatus(c, status, component, props)` in Fiber, or
+`RenderWithStatus(w, r, status, component, props)` in native HTTP for an Inertia
+error page. These responses keep `X-Inertia: true`, regular shared props, and
+the requested HTTP status, so v3 `httpException` handling can run. The host must
+supply the corresponding frontend component.
+
+The v3 default error handlers return a safe non-Inertia JSON response for an
+ordinary failed Inertia request, preserving its error status. This includes a
+failed non-rescued prop callback. They do not redirect repeatedly to the failed
+page. Validation errors retain the existing redirect/session flow. V2 retains
+its historical error behavior. Hosts can continue supplying custom error
+handling and deciding when to render a component instead.
+
+Reference: [pinned middleware](https://github.com/inertiajs/inertia-laravel/blob/4da52b72da39396cad1d3ec8523b6c649009456e/src/Middleware.php)
+and [v3.8.0 response handling](https://github.com/inertiajs/inertia/blob/v3.8.0/packages/core/src/response.ts).

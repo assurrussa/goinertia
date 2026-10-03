@@ -106,3 +106,14 @@ other emitting roots retain their label, while unrelated plain values cannot
 inherit stale merge instructions. New MergeAt values replace lower-layer data
 and wrapper metadata before Once/deferred selection; old wrapper replacement
 semantics outside MergeAt remain unchanged.
+
+
+## Explicit Inertia v3.8.0 profile (2026-10-03)
+
+V2 remains the constructor default. V3 uses a separate recursive resolver so
+legacy precedence/error/Once behavior is not silently changed. Prop wrappers
+remain source-compatible, with additive Rescue/ScrollAt helpers; new wire fields
+are carried in State, not public DTO struct layouts. Maps and slices resolve
+request-owned copies and preserve source-qualified lazy caches. Provider-returned
+containers bypass child partial filtering per pinned Laravel3.x behavior.
+See docs/inertia-v3.md for exact sources, optional host features and acceptance.

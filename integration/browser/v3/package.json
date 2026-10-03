@@ -1,0 +1,14 @@
+{
+  "name": "goinertia-browser-contract-v3",
+  "private": true,
+  "type": "module",
+  "description": "Isolated official v3 clients: do not install with legacy peer dependency overrides.",
+  "dependencies": {
+    "@inertiajs/core": "3.8.0",
+    "@inertiajs/react": "3.8.0",
+    "@inertiajs/vue3": "3.8.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "vue": "3.5.22"
+  }
+}

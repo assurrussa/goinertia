@@ -6,25 +6,17 @@ browser integration from successful JSON fixtures alone.
 
 ## Version contract
 
-The compatibility target of this change is the existing **Inertia v2.x wire
-contract subset**, including the historical root/Fiber behavior described below.
-It is not a claim of complete v2 support or compatibility with every v2 minor.
-The pinned client regression target is **Inertia v2.3.18**, commit
-`ed9b159a5857663211580e081d6bd90520f17bad`. Its actual merge, deferred scheduler
-and scroll reset methods are replayed against responses from all three public
-adapter entrypoints. This does not certify the entire v2.3.18 client. The forward
-implementation target is the **Inertia v3 server protocol** documented on the
-audit date.
-The official documentation defaults to v3 and explicitly marks v2 as legacy.
-See the [documentation index](https://inertiajs.com/docs/llms.txt),
-[v2 protocol](https://inertiajs.com/docs/v2/core-concepts/the-protocol), and
-[v3 upgrade guide](https://inertiajs.com/docs/v3/getting-started/upgrade-guide).
-Sources were checked on 2026-10-03; no latest patch release or public Go tag is
-asserted. The examples now pin 2.3.28. A separate [real browser matrix](../integration/browser/README.md)
-exercises published Vue/React clients at exact 2.3.18 and 2.3.28, each against
-native Fiber/net/http with CSR and actual SSR hydration. Its CI jobs are a merge
-gate, independent of the historical focused method replay. This matrix does not
-certify every client feature or an unrestricted v2/v3 compatibility claim.
+The default contract preserves the existing **Inertia v2.x subset**, including
+its historical root/Fiber behavior. Published client versions **2.3.18** and
+**2.3.28** remain pinned in the regression suite. The tables below describe that
+v2 baseline, rather than limitations of the new v3 profile.
+
+Explicit `WithProtocolVersion(ProtocolV3)` enables the **Inertia 3.8.0 server
+protocol**. Its source-backed [feature and acceptance matrix](inertia-v3.md)
+records every v3 field, versioned difference, host responsibility and required
+browser gate. A passing JSON or SSR-only fixture is never evidence of hydration.
+
+Sources were checked on 2026-10-03. No new public Go release/tag is asserted.
 
 Implemented means the server behavior exists and is covered by local tests.
 Partial means a documented subset or compatibility difference remains.
@@ -103,81 +95,24 @@ The library supplies server hooks for
 It does not implement host authentication, credentials or client encryption.
 Session and CSRF fixtures use local data only.
 
-## v3-specific gaps
+## Explicit v3 profile and acceptance
 
-The [v3 protocol](https://inertiajs.com/docs/v3/core-concepts/the-protocol)
-and [upgrade guide](https://inertiajs.com/docs/v3/getting-started/upgrade-guide)
-introduce requirements beyond the compatible template/DTO contract:
+The prior v3-specific bootstrap, redirect, recursive-wrapper, rescue and SSR gaps
+are implemented behind the explicit profile. See [Inertia v3](inertia-v3.md) for
+the exact source pins, APIs and complete candidate acceptance matrix.
 
-| Feature | Core | Legacy Fiber | Native Fiber | Native HTTP |
-|---|---|---|---|---|
-| Script-element initial page and safe JSON/script termination | Missing default | Missing default | Missing default | Missing default |
-| X-Inertia-Redirect fresh Inertia GET response | Missing | Missing | Missing | Missing |
-| Explicit deferred rescue and rescuedProps | Missing | Missing | Missing | Missing |
-| Recursive nested wrappers and dotted selection/metadata | Missing | Missing | Missing | Missing |
-| Native flash / onFlash | v2 subset | v2 subset | v2 subset | v2 subset |
-| Exception page with correct error status/shared props | Partial | Partial | Partial | Partial |
+V2 continues preserving its historical only/except and Once policies, public
+struct layouts, callback lifecycle and SSR error behavior. New metadata is kept
+in request-local state rather than added to positional public structs. Native
+adapters serialize `MarshalPageWithState`; direct core callers must do the same.
 
-Lazy callback errors currently log and omit the value, preserving old behavior.
-This is not v3 deferred rescue: there is no explicit rescue choice or rescuedProps
-signal. The [deferred error policy](https://inertiajs.com/docs/v3/data-props/deferred-props)
-needs a versioned design before changing that default. The
-[native flash API](https://inertiajs.com/docs/v2/data-props/flash-data) also exists
-in later v2 clients; `WithNativeFlash` opts into its top-level wire contract.
-Normal props.flash remains in history and must not be advertised as its
-equivalent. See [flash behavior and session lifecycle](flash.md).
-v3 error pages require dedicated tests against
-[exception handling](https://inertiajs.com/docs/v3/advanced/error-handling).
-
-## Acceptance gates and phased work
-
-The compatible adapter PR is blocked by regressions in its supported subset,
-request ownership/cancellation, session/CSRF, response commitment, or the existing
-Fiber/GoAdmin API. The audit fixes partial deferred re-announcement, metadata for
-excluded props and unresolved merge/scroll values, eligible except wrappers,
-nested lazy containers, paginator data paths/reset, and multiple HTTP Vary lines.
-HTTP fixes also bind downstream contexts and follow Unwrap when checking
-commitment, preventing an error template from being appended to a sent body.
-These have targeted shared/core/HTTP regressions. The old Fiber test requiring
-once metadata for an unselected prop now asserts its absence, matching the
-reference adapter's metadata filter. Existing helper signatures and facade
-aliases remain. ScrollPropConfig retains its original four-field layout, including
-positional literals. The request-only reset flag is encoded by an internal wire
-view, rather than added to the public DTO/config. Raw JSON, default HTML and SSR
-fixtures cover it. For direct core consumers, BuildPage returns the compatible
-DTO; `core.MarshalPageWithState(page, state)` creates the request wire response
-including opt-in native flash and scroll reset. The older
-`core.MarshalPage(page, state.Meta.Reset)` remains available for scroll reset
-only. Plain json.Marshal(PageDTO) lacks request-only metadata. The adapters perform
-this step, and replay fixtures keep raw response JSON. Nested lazy cache keys use
-source layers and length-prefixed
-map/array paths; literal dots and context/request callbacks cannot alias.
-Full fmt/vet/lint/build, existing Fiber tests, shared fixtures, race x5, local SSR and session checks, external
-consumers, GoAdmin 0.7 source integration and performance comparisons remain
-required after code changes.
-
-The outstanding rows above block a **complete protocol support claim**, even
-when the compatible PR gates pass. They are scoped follow-up work, not hidden
-HTTP/Fiber parity failures introduced by extraction. Work in this order:
-
-1. Add explicit protocol/version policy with v2 defaults preserved. Extend the pinned
-   v2 replay with full v2 and v3 client fixtures; exercise browser bootstrap, redirects, partial
-   requests, history, native flash and SSR hydration on both server adapters.
-2. Complete common prop semantics: dotted selection, nested merge targets,
-   custom scroll paths/defer metadata, once refresh, and versioned only/except/error
-   behavior. Use one core implementation and the same adapter fixtures.
-3. V2 follow-up (stage 3): dotted JSON-map selection, nested mixed merge/match
-   targets and additive Once freshness/composition. Preserve exported struct
-   layouts, reserved props, except precedence and legacy Once defaults.
-   Custom scroll normalization and unrestricted recursive wrappers remain deferred.
-4. Later, separately scoped v3 work: bootstrap, redirect and deferred rescue/error
-   contracts beyond native flash, HTTP error-policy hooks, SSR development and
-   per-request control, and the broader v3 client matrix.
-   Re-run lifecycle/race, external consumers and performance budgets for every
-   material change. Publication/release acceptance is separate from these tests.
-
-No new generic framework interface, whole-response buffer or adapter-to-adapter
-bridge is needed to complete these features.
+Required checks include full fmt/vet/lint/build/tests, race x5, pinned v2 replay,
+independent HTTP consumer and its no-Fiber dependency graph, the unchanged 240
+v2 browser regressions, and the v3 Vue/React × Fiber/nethttp × CSR/real SSR matrix.
+Browser startup, hydration, exception, cancellation, fragment/version redirects,
+flash/history and deferred/Once/merge/rescue flows must pass on the frozen
+candidate before a full support claim. See the browser README for execution.
+No generic framework interface, whole-response buffer or adapter bridge is added.
 
 ## Independent HTTP consumer
 
@@ -206,5 +141,5 @@ workflow through `make protocol-replay`. It can also be run separately with
 `GOINERTIA_CLIENT_REPLAY=1 go test -run '^TestPinnedClientProtocolReplay$' ./`.
 See [replay provenance and limits](../integration/protocol-replay/README.md).
 It covers grouped deferred scheduling, preservation of an excluded deep-merge
-prop, paginator append/prepend and scroll reset. Full browser/bootstrap/history
-and hydration remain roadmap acceptance gates, not results claimed here.
+prop, paginator append/prepend and scroll reset. Browser/bootstrap/history and hydration are covered separately by the real
+browser matrix; this focused replay makes no claims about them.

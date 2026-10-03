@@ -13,6 +13,8 @@ import (
 	"github.com/assurrussa/goinertia/core"
 )
 
+const errorMessageKey = "message"
+
 // SessionStore owns its session lifecycle. Mutations may set cookies on w and
 // must complete before response commitment. Hosts own storage and rotation.
 type SessionStore interface {
@@ -166,24 +168,8 @@ func (i *Inertia) Middleware(next http.Handler) http.Handler {
 		s.Context = r.Context()
 		writer := &responseWriter{
 			ResponseWriter: w,
-			before: func(status int) int { //nolint:contextcheck // Closure owns the native request context.
-				active := ref.request
-				h := w.Header()
-				appendVary(h, core.HeaderInertia)
-				if i.PrecognitionVary() {
-					appendVary(h, core.HeaderPrecognition)
-				}
-				if (s.Meta.Inertia != "" || s.Meta.Precognition != "") && strings.Contains(strings.ToLower(s.Meta.CacheControl), "no-cache") {
-					h.Set("Cache-Control", "no-cache")
-				}
-				if i.sessionStore != nil && s.Meta.Precognition == "" && core.IsFlashResponse(status, h.Get(core.HeaderLocation)) {
-					if data := s.FlashToPersist(); len(data) > 0 {
-						if err := i.sessionStore.Flash(w, active, string(core.ContextKeyProps), data); err != nil {
-							i.logger.ErrorContext(active.Context(), "could not set flash session props", "error", err)
-						}
-					}
-				}
-				return core.NormalizeRedirect(s.Meta, status)
+			before: func(status int) int {
+				return i.beforeResponse(w, ref.request, s, status)
 			},
 		}
 		wrapped := preserveCapabilities(writer)
@@ -196,12 +182,43 @@ func (i *Inertia) Middleware(next http.Handler) http.Handler {
 		}
 		if s.Meta.Inertia != "" && r.Method == http.MethodGet && s.Meta.Version != i.AssetVersion() && s.Meta.Precognition == "" {
 			wrapped.Header().Set(core.HeaderLocation, i.ConflictLocation(s.Meta.URL))
+			if i.IsProtocolV3() {
+				wrapped.Header().Set(core.HeaderVersion, i.AssetVersion())
+			}
 			wrapped.WriteHeader(http.StatusConflict)
 			return
 		}
 		next.ServeHTTP(wrapped, r)
 		writer.finish()
 	})
+}
+
+func (i *Inertia) beforeResponse(w http.ResponseWriter, r *http.Request, state *core.State, status int) int {
+	h := w.Header()
+	appendVary(h, core.HeaderInertia)
+	if i.PrecognitionVary() {
+		appendVary(h, core.HeaderPrecognition)
+	}
+	meta := state.Meta
+	if (meta.Inertia != "" || meta.Precognition != "") && strings.Contains(strings.ToLower(meta.CacheControl), "no-cache") {
+		h.Set("Cache-Control", "no-cache")
+	}
+	flashResponse := core.IsFlashResponse(status, h.Get(core.HeaderLocation)) ||
+		(status == http.StatusConflict && h.Get(core.HeaderRedirect) != "")
+	if i.sessionStore != nil && meta.Precognition == "" && flashResponse {
+		if data := state.FlashToPersist(); len(data) > 0 {
+			if err := i.sessionStore.Flash(w, r, string(core.ContextKeyProps), data); err != nil {
+				i.logger.ErrorContext(r.Context(), "could not set flash session props", "error", err)
+			}
+		}
+	}
+	if i.IsFragmentRedirect(meta.Inertia, isPrefetch(r), status, h.Get("Location")) {
+		h.Set(core.HeaderRedirect, h.Get("Location"))
+		h.Del("Location")
+		h.Del(core.HeaderInertia)
+		return http.StatusConflict
+	}
+	return core.NormalizeRedirect(meta, status)
 }
 
 // Handler adapts an error-returning native HTTP handler without a framework bridge.
@@ -215,6 +232,23 @@ func (i *Inertia) Handler(fn func(http.ResponseWriter, *http.Request) error) htt
 
 // Render creates JSON or HTML using native request state.
 func (i *Inertia) Render(w http.ResponseWriter, r *http.Request, component string, props map[string]any) error {
+	return i.renderWithStatus(w, r, 0, component, props)
+}
+
+// RenderWithStatus renders an Inertia page with an explicit HTTP status. The
+// page is fully serialized before status, headers or body are committed.
+func (i *Inertia) RenderWithStatus(
+	w http.ResponseWriter, r *http.Request, status int, component string, props map[string]any,
+) error {
+	if status < 200 || status > 599 {
+		return fmt.Errorf("invalid page status: %d", status)
+	}
+	return i.renderWithStatus(w, r, status, component, props)
+}
+
+func (i *Inertia) renderWithStatus(
+	w http.ResponseWriter, r *http.Request, status int, component string, props map[string]any,
+) error {
 	s := State(r)
 	if s == nil {
 		return errors.New("inertia: net/http Middleware is required")
@@ -247,6 +281,9 @@ func (i *Inertia) Render(w http.ResponseWriter, r *http.Request, component strin
 		}
 		w.Header().Set(core.HeaderInertia, "true")
 		w.Header().Set("Content-Type", "application/json")
+		if status != 0 {
+			w.WriteHeader(status)
+		}
 		_, err = w.Write(data) //nolint:gosec // Serialized JSON has application/json content type.
 		return err
 	}
@@ -255,6 +292,9 @@ func (i *Inertia) Render(w http.ResponseWriter, r *http.Request, component strin
 		return err
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if status != 0 {
+		w.WriteHeader(status)
+	}
 	_, err = w.Write(data) //nolint:gosec // html/template escapes page data; SSR HTML is trusted host output.
 	return err
 }
@@ -285,6 +325,11 @@ func (i *Inertia) Redirect(w http.ResponseWriter, r *http.Request, target string
 	}
 	if r.Header.Get(core.HeaderInertia) != "" && i.IsExternalRedirect(target) {
 		return i.RedirectExternal(w, r, target)
+	}
+	if i.IsFragmentRedirect(r.Header.Get(core.HeaderInertia), isPrefetch(r), http.StatusFound, target) {
+		w.Header().Set(core.HeaderRedirect, target)
+		w.WriteHeader(http.StatusConflict)
+		return nil
 	}
 	http.Redirect(w, r, target, http.StatusFound) //nolint:gosec // Hosts validate redirect targets.
 	return nil
@@ -340,7 +385,21 @@ func (i *Inertia) HandleError(w http.ResponseWriter, r *http.Request, err error)
 		w.Header().Set(core.HeaderPrecognition, "true")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(appErr.Code)
-		_ = json.NewEncoder(w).Encode(map[string]any{"message": appErr.Message})
+		_ = json.NewEncoder(w).Encode(map[string]any{errorMessageKey: appErr.Message})
+		return
+	}
+	if i.IsProtocolV3() && s != nil && s.Meta.Inertia != "" && len(appErr.ValidationErrors()) == 0 {
+		status := appErr.Code
+		if status < http.StatusBadRequest || status > 599 {
+			status = http.StatusInternalServerError
+		}
+		w.Header().Del(core.HeaderInertia)
+		w.Header().Del(core.HeaderLocation)
+		w.Header().Del(core.HeaderRedirect)
+		w.Header().Del("Location")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]string{errorMessageKey: core.DefaultCustomErrorDetails(appErr, false)})
 		return
 	}
 	if s != nil && (s.Meta.Inertia != "" || r.Method != http.MethodGet) {
@@ -360,8 +419,8 @@ func (i *Inertia) HandleError(w http.ResponseWriter, r *http.Request, err error)
 	data,
 		templateErr := core.ExecuteTemplate(tmpl,
 		map[string]any{
-			"code":    appErr.Code,
-			"message": appErr.Message,
+			"code":          appErr.Code,
+			errorMessageKey: appErr.Message,
 			"details": core.DefaultCustomErrorDetails(appErr,
 				false),
 		})
@@ -372,4 +431,8 @@ func (i *Inertia) HandleError(w http.ResponseWriter, r *http.Request, err error)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(appErr.Code)
 	_, _ = w.Write(data)
+}
+
+func isPrefetch(r *http.Request) bool {
+	return core.IsPrefetch(r.Header.Get("Purpose"), r.Header.Get("Sec-Purpose"), r.Header.Get("X-Moz"))
 }

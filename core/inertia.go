@@ -16,11 +16,13 @@ import (
 )
 
 type pageMeta struct {
-	matchPropsOn   []string
-	scrollProps    map[string]ScrollPropConfig
-	encryptHistory *bool
-	clearHistory   *bool
-	nativeFlash    map[string]any
+	matchPropsOn     []string
+	scrollProps      map[string]ScrollPropConfig
+	encryptHistory   *bool
+	clearHistory     *bool
+	nativeFlash      map[string]any
+	preserveFragment *bool
+	ssrDisabled      bool
 }
 
 type partialConfig struct {
@@ -58,11 +60,16 @@ type Inertia struct {
 	ssrConfig               SSRConfig
 	ssrClient               SSRClient
 	ssrCache                *ssrCache
+	ssrErrorPolicy          SSRErrorPolicy
+	ssrFailureHandler       SSRFailureHandler
+	viteSSR                 *bool
 	logger                  Logger
 	csrfPropName            string
 	csrfEnabled             bool
 	isDev                   bool
 	precognitionVary        bool
+	protocolVersion         ProtocolVersion
+	preserveBigIntegers     bool
 }
 
 func Must(inr *Inertia, err error) *Inertia {
@@ -198,6 +205,10 @@ func (i *Inertia) WithValidationErrors(c *State, errors ValidationErrors) {
 // WithErrors adds validation errors to the response.
 // Only adds to context; session is written via setFlashSessionData.
 func (i *Inertia) WithErrors(c *State, errors map[string]string) {
+	if i.IsProtocolV3() {
+		i.mergeV3Errors(c, errors)
+		return
+	}
 	props := i.getContextKeyProps(c)
 
 	curErrors := make(map[string]string)
@@ -332,6 +343,9 @@ func (i *Inertia) getContextKeyPageMeta(c *State) *pageMeta {
 }
 
 func (i *Inertia) BuildPage(c *State, component string, props map[string]any) (*PageDTO, error) {
+	if i.IsProtocolV3() {
+		return i.buildPageV3(c, component, props)
+	}
 	c.propMetadata = nil
 	c.nestedMergeRoots = nil
 	partial := i.parsePartialConfig(c, component)
@@ -647,7 +661,7 @@ func (i *Inertia) handleDeferredProp(c *State, page *PageDTO, key string, prop D
 
 	group := prop.Group
 	if group == "" {
-		group = "default"
+		group = defaultDeferredGroup
 	}
 	if page.DeferredProps == nil {
 		page.DeferredProps = make(map[string][]string)
@@ -741,16 +755,15 @@ func (i *Inertia) RenderHTML(c *State, page *PageDTO) ([]byte, error) {
 	}
 
 	viewData["page"] = page
-	viewData["pageJSON"] = pageResponse(page, c.Meta.Reset, c.nativeFlash())
+	viewData["pageJSON"] = pageResponseWithState(page, c)
 
-	if i.IsSSREnabled() {
-		ssr, err := i.processSSR(c.Context, viewData["pageJSON"])
-		if err != nil {
-			return nil, err
-		}
-		viewData["processSSR"] = ssr
-	} else {
-		viewData["processSSR"] = nil
+	ssr, err := i.renderSSR(c, viewData["pageJSON"])
+	if err != nil {
+		return nil, err
+	}
+	viewData["processSSR"] = ssr
+	if err := i.bootstrapViewData(viewData, ssr); err != nil {
+		return nil, err
 	}
 
 	var buf bytes.Buffer
@@ -960,6 +973,10 @@ func (i *Inertia) applyErrorBag(c *State, page *PageDTO) {
 	}
 	bag := strings.TrimSpace(c.Meta.ErrorBag)
 	if bag == "" {
+		return
+	}
+	if i.IsProtocolV3() {
+		page.Props[ContextPropsErrors] = map[string]any{bag: page.Props[ContextPropsErrors]}
 		return
 	}
 

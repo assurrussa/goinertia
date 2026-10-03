@@ -1,0 +1,18 @@
+{
+  "name": "goinertia-v3-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "ssr": "node dist/ssr.mjs"
+  },
+  "dependencies": {
+    "@inertiajs/core": "3.8.0",
+    "@inertiajs/react": "3.8.0",
+    "@inertiajs/vue3": "3.8.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "vue": "3.5.22"
+  },
+  "devDependencies": { "esbuild": "0.25.12" }
+}

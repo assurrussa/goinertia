@@ -445,7 +445,7 @@ func (i *Inertia) renderHTMLError(c fiber.Ctx, appErr *Error, details string) er
 	if appErr == nil {
 		appErr = ErrNillable
 	}
-	data := map[string]any{"code": appErr.Code, "message": appErr.Message}
+	data := map[string]any{"code": appErr.Code, errorMessageKey: appErr.Message}
 	if details != "" {
 		data["details"] = details
 	}
@@ -514,6 +514,11 @@ func (i *Inertia) Redirect(c fiber.Ctx, url string) error {
 		if i.isExternalRedirect(url) {
 			return i.RedirectExternal(c, url)
 		}
+		if i.IsFragmentRedirect(c.Get(HeaderInertia), isPrefetch(c), fiber.StatusFound, url) {
+			c.Set(HeaderRedirect, url)
+			c.Status(fiber.StatusConflict)
+			return c.Send(nil)
+		}
 		// For Inertia requests, use standard redirect (internal visit).
 		return c.Redirect().Status(fiber.StatusFound).To(url)
 	}
@@ -580,7 +585,7 @@ func (i *Inertia) renderPrecognitionError(c fiber.Ctx, errReturn *Error) error {
 		}
 	}
 
-	payload := map[string]any{"message": message}
+	payload := map[string]any{errorMessageKey: message}
 	js, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("error marshaling precognition error: %w", err)
@@ -628,7 +633,8 @@ func (i *Inertia) setFlashSessionData(c fiber.Ctx) {
 		status == fiber.StatusSeeOther ||
 		status == fiber.StatusTemporaryRedirect ||
 		status == fiber.StatusPermanentRedirect
-	isInertiaLocationConflict := status == fiber.StatusConflict && len(c.Response().Header.Peek(HeaderLocation)) > 0
+	isInertiaLocationConflict := status == fiber.StatusConflict && (len(c.Response().Header.Peek(HeaderLocation)) > 0 ||
+		len(c.Response().Header.Peek(HeaderRedirect)) > 0)
 	if !isRedirect && !isInertiaLocationConflict {
 		return
 	}
