@@ -41,7 +41,8 @@ func (w *responseWriter) WriteHeader(status int) {
 		return
 	}
 	normalized := w.before(status)
-	w.dropBody = normalized != status && normalized == http.StatusSeeOther
+	w.dropBody = normalized != status && (normalized == http.StatusSeeOther ||
+		(normalized == http.StatusConflict && w.Header().Get(core.HeaderRedirect) != ""))
 	if w.dropBody {
 		w.Header().Del("Content-Length")
 	}

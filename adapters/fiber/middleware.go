@@ -28,6 +28,9 @@ func (i *Inertia) Middleware() fiber.Handler {
 		// Check asset version for GET requests only
 		if method == http.MethodGet && c.Get(HeaderVersion) != i.AssetVersion() && !i.isPrecognitionRequest(c) {
 			c.Set(HeaderLocation, i.ConflictLocation(c.OriginalURL()))
+			if i.IsProtocolV3() {
+				c.Set(HeaderVersion, i.AssetVersion())
+			}
 			err := c.SendStatus(fiber.StatusConflict)
 			return i.redirectCheck(c, err)
 		}
@@ -51,6 +54,17 @@ func (i *Inertia) MiddlewareErrorListener() fiber.ErrorHandler {
 			return i.renderPrecognitionError(c, errReturn)
 		}
 		details := i.customErrorDetailsHandler(errReturn, isAllowedErrorDetailsMessage)
+		if i.IsProtocolV3() && c.Get(HeaderInertia) != "" && len(errReturn.ValidationErrors()) == 0 {
+			status := errReturn.Code
+			if status < http.StatusBadRequest || status > 599 {
+				status = http.StatusInternalServerError
+			}
+			c.Response().Header.Del(HeaderInertia)
+			c.Response().Header.Del(HeaderLocation)
+			c.Response().Header.Del(HeaderRedirect)
+			c.Response().Header.Del(fiber.HeaderLocation)
+			return c.Status(status).JSON(map[string]string{errorMessageKey: details})
+		}
 
 		if c.Get(HeaderInertia) == "" && c.Method() == fiber.MethodGet {
 			return i.renderHTMLError(c, errReturn, details)
@@ -81,6 +95,16 @@ func (i *Inertia) redirectCheck(c fiber.Ctx, err error) error {
 
 	method := c.Method()
 	statusCode := c.Response().StatusCode()
+	location := string(c.Response().Header.Peek(fiber.HeaderLocation))
+	if i.IsFragmentRedirect(c.Get(HeaderInertia), isPrefetch(c), statusCode, location) {
+		c.Set(HeaderRedirect, location)
+		c.Response().Header.Del(fiber.HeaderLocation)
+		c.Response().Header.Del(HeaderInertia)
+		c.Response().Header.Del(fiber.HeaderContentLength)
+		c.Status(fiber.StatusConflict)
+		c.Response().SetBodyString("")
+		return err
+	}
 	if i.isMethodPost(method) && i.isRedirectStatus(statusCode) {
 		c.Status(fiber.StatusSeeOther)
 		c.Response().SetBodyString("")

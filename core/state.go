@@ -25,6 +25,7 @@ type State struct {
 	propSource                 propSource
 	propMetadata               map[propMetadataLabel][]string
 	nestedMergeRoots           map[string]bool
+	v3                         *v3PageMetadata
 	legacyContext              context.Context //nolint:containedctx // Compatibility callback context is request-local.
 }
 
@@ -70,6 +71,12 @@ func (s *State) FlashToPersist() map[string]any {
 		if v, ok := s.Props[key].(map[string]string); ok && len(v) > 0 {
 			data[key] = v
 		}
+	}
+	if v, ok := s.Props[ContextPropsErrors].(ValidationErrors); ok && len(v) > 0 {
+		data[ContextPropsErrors] = cloneValidationErrors(v)
+	}
+	if v, ok := s.Props[ContextPropsErrors].(map[string]any); ok && len(v) > 0 {
+		data[ContextPropsErrors] = v
 	}
 	if v, ok := s.Props[ContextPropsOld].(map[string]any); ok && len(v) > 0 {
 		data[ContextPropsOld] = v

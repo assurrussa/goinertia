@@ -49,7 +49,7 @@ type OnceProp struct {
 
 // Defer wraps a value as a deferred prop. If group is empty, "default" is used.
 func Defer(value any, group ...string) DeferredProp {
-	g := "default"
+	g := defaultDeferredGroup
 	if len(group) > 0 && group[0] != "" {
 		g = group[0]
 	}

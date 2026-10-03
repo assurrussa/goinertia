@@ -114,8 +114,9 @@ func (i *Inertia) processSSR(ctx context.Context, page any) (*SsrDTO, error) {
 		return nil, fmt.Errorf("error marshaling page: %w", err)
 	}
 
-	cacheKey := ssrCacheKey(js)
-	if i.ssrCache != nil {
+	endpoint, development := i.ssrEndpoint()
+	cacheKey := ssrCacheKey(append([]byte(endpoint+"\n"), js...))
+	if i.ssrCache != nil && !development {
 		if cached, ok := i.ssrCache.Get(cacheKey); ok {
 			return cached, nil
 		}
@@ -145,7 +146,7 @@ func (i *Inertia) processSSR(ctx context.Context, page any) (*SsrDTO, error) {
 	maxRetries := i.ssrConfig.MaxRetries
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		statusCode, body, err = i.ssrClient.Post(reqCtx, i.ssrConfig.URL, js, reqHeader)
+		statusCode, body, err = i.ssrClient.Post(reqCtx, endpoint, js, reqHeader)
 		if err == nil && !shouldRetrySSRStatus(statusCode, i.ssrConfig.RetryStatuses) {
 			break
 		}
@@ -156,7 +157,7 @@ func (i *Inertia) processSSR(ctx context.Context, page any) (*SsrDTO, error) {
 			i.logger.WarnContext(
 				ctx, "SSR retrying request",
 				"attempt", attempt+1,
-				"url", i.ssrConfig.URL,
+				"url", endpoint,
 				"status", statusCode,
 				"error", err,
 			)
@@ -167,23 +168,16 @@ func (i *Inertia) processSSR(ctx context.Context, page any) (*SsrDTO, error) {
 	}
 
 	if err != nil {
-		i.logger.ErrorContext(ctx, "SSR request failed", "error", err, "url", i.ssrConfig.URL)
+		i.logger.ErrorContext(ctx, "SSR request failed", "error", err, "url", endpoint)
 		return nil, fmt.Errorf("error posting ssr: %w", err)
 	}
 
-	if statusCode >= 400 {
-		i.logger.ErrorContext(ctx, "SSR response error", "status", statusCode, "url", i.ssrConfig.URL)
-		return nil, ErrBadSsrStatusCode
-	}
-
-	ssr := new(SsrDTO)
-	err = json.Unmarshal(body, ssr)
+	ssr, err := i.decodeSSRResponse(ctx, endpoint, statusCode, body)
 	if err != nil {
-		i.logger.ErrorContext(ctx, "SSR unmarshal failed", "error", err)
-		return nil, fmt.Errorf("error unmarshalling ssr: %w", err)
+		return nil, err
 	}
 
-	if i.ssrCache != nil {
+	if i.ssrCache != nil && !development {
 		i.ssrCache.Set(cacheKey, ssr)
 	}
 
@@ -238,4 +232,29 @@ func shouldRetrySSRStatus(statusCode int, retryStatuses []int) bool {
 func ssrCacheKey(payload []byte) string {
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:])
+}
+
+func (i *Inertia) decodeSSRResponse(ctx context.Context, endpoint string, statusCode int, body []byte) (*SsrDTO, error) {
+	if statusCode >= 400 || (i.IsProtocolV3() && (statusCode < 200 || statusCode >= 300)) {
+		i.logger.ErrorContext(ctx, "SSR response error", "status", statusCode, "url", endpoint)
+		if i.IsProtocolV3() {
+			return nil, ssrResponseError(statusCode, body)
+		}
+		return nil, ErrBadSsrStatusCode
+	}
+
+	ssr := new(SsrDTO)
+	err := json.Unmarshal(body, ssr)
+	if err != nil {
+		i.logger.ErrorContext(ctx, "SSR unmarshal failed", "error", err)
+		return nil, fmt.Errorf("error unmarshalling ssr: %w", err)
+	}
+
+	if i.IsProtocolV3() {
+		if err := validateSSRResponse(ssr); err != nil {
+			return nil, err
+		}
+	}
+
+	return ssr, nil
 }

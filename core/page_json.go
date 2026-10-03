@@ -57,5 +57,15 @@ func MarshalPageWithState(page *PageDTO, state *State) ([]byte, error) {
 	if state == nil {
 		return MarshalPage(page, "")
 	}
-	return json.Marshal(pageResponse(page, state.Meta.Reset, state.nativeFlash()))
+	return json.Marshal(pageResponseWithState(page, state))
+}
+
+func pageResponseWithState(page *PageDTO, state *State) any {
+	if state == nil {
+		return pageResponse(page, "", nil)
+	}
+	if state.v3 == nil {
+		return pageResponse(page, state.Meta.Reset, state.nativeFlash())
+	}
+	return v3PageResponse{page: page, state: state}
 }

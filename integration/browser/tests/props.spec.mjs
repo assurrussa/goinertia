@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { initialPage, matrix } from './support.mjs'
 
 async function state(page) {
   return JSON.parse(await page.locator('#prop-state').textContent())
@@ -10,7 +11,7 @@ async function openProps(page) {
   await expect.poll(() => state(page)).toMatchObject({
     cached: 'cached-1', deferredOnce: 'deferredOnce-1', onceDeferred: 'onceDeferred-1',
   })
-  return JSON.parse(await page.locator('#app').getAttribute('data-page'))
+  return initialPage(page)
 }
 
 async function clickResponse(page, control, partial = '') {
@@ -48,9 +49,10 @@ test('explicit once reloads refresh and except-only refresh is opt-in', async ({
   result = await clickResponse(page, 'propsExcept')
   expect(result.headers['x-inertia-partial-except']).toBe('catalog')
   expect(remembered(result.headers)).toEqual(expect.arrayContaining(['stable-cache', 'refreshable']))
-  expect(result.data.props).not.toHaveProperty('cached')
+  if (matrix.protocol === 3) expect(result.data.props.cached).toBe('cached-2')
+  else expect(result.data.props).not.toHaveProperty('cached')
   expect(result.data.props.refreshable).toBe('refreshable-2')
-  await expect.poll(() => state(page)).toMatchObject({ step: 2, cached: 'cached-1', refreshable: 'refreshable-2' })
+  await expect.poll(() => state(page)).toMatchObject({ step: 2, cached: matrix.protocol === 3 ? 'cached-2' : 'cached-1', refreshable: 'refreshable-2' })
 })
 
 test('server fresh option replaces a remembered once value on an ordinary visit', async ({ page }) => {
@@ -150,9 +152,14 @@ test('dotted only/except selections return nested objects with real partial repl
   expect(selected.data.props).not.toHaveProperty('feed')
   // Inertia shallowly replaces this root prop; the server does not synthesize a
   // deep-merge policy for ordinary nested selection.
-  await expect.poll(async () => (await state(page)).selection).toEqual({ profile: { name: 'name-2' } })
+  await expect.poll(async () => (await state(page)).selection).toEqual(matrix.protocol === 3
+    ? { profile: { name: 'name-2', email: 'user-1@example.test' }, settings: { theme: 'theme-1' } }
+    : { profile: { name: 'name-2' } })
   const excluded = await clickResponse(page, 'nestedExcept')
   expect(excluded.headers['x-inertia-partial-except']).toBe('selection.profile.email')
   expect(excluded.data.props.selection).toEqual({ profile: { name: 'name-3' }, settings: { theme: 'theme-3' } })
-  await expect.poll(async () => (await state(page)).selection).toEqual({ profile: { name: 'name-3' }, settings: { theme: 'theme-3' } })
+  await expect.poll(async () => (await state(page)).selection).toEqual({
+    profile: { name: 'name-3', ...(matrix.protocol === 3 ? { email: 'user-1@example.test' } : {}) },
+    settings: { theme: 'theme-3' },
+  })
 })

@@ -9,9 +9,11 @@
 
 `goinertia` allows you to build modern single-page apps
 using [Vue.js](https://vuejs.org/), [React](https://reactjs.org/), or [Svelte](https://svelte.dev/) while keeping
-routing and controllers in your Go backend. The compatible API targets an Inertia v2.x
-protocol subset. See the [coverage matrix and v3 roadmap](docs/protocol-coverage.md)
-for supported behavior, compatibility differences and remaining work.
+routing and controllers in your Go backend. Existing applications retain the
+compatible Inertia v2 contract. The explicit
+[Inertia v3.8.0 profile](docs/inertia-v3.md) adds script bootstrap, recursive props,
+rescue, fragment redirects and versioned SSR behavior. See the
+[coverage matrix](docs/protocol-coverage.md) for supported behavior and test gates.
 
 Visit:
 

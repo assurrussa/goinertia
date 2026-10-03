@@ -9,9 +9,10 @@ Inertia protocol headers, page rendering, partial reloads, lazy/deferred/once
 props, merge and scroll metadata, flash and validation helpers, CSRF hooks,
 error handling, and optional SSR.
 
-The architecture decision retains both native lifecycles. The wire contract is
-a documented Inertia v2.x subset; current official documentation targets v3.
-Consult `docs/protocol-coverage.md` before claiming complete protocol support.
+The architecture decision retains both native lifecycles. The default wire contract preserves
+the documented Inertia v2.x subset. An explicit ProtocolV3 profile targets
+published Inertia 3.8.0. Consult `docs/protocol-coverage.md` and
+`docs/inertia-v3.md` before claiming protocol/client support.
 
 Treat this repository as a library, not an application host. Keep public API
 changes small, documented, and covered by tests because downstream Fiber

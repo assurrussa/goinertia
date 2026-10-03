@@ -20,7 +20,21 @@ export function controls(router) {
   }
 }
 export function installObservations(router) {
+  window.__router = router
+  window.__cancelled = 0
+  window.__locations = []
   window.__flashEvents = []
   window.__onFlash = null
+  if (__INERTIA_V3__) router.on('location', (event) => window.__locations.push({ url: String(event.detail.url), versionChange: event.detail.versionChange }))
   router.on('flash', (event) => window.__flashEvents.push(event.detail.flash))
 }
+
+// JSON display never feeds the client: the public client parser is responsible
+// for preserving BigInts. This view merely makes their runtime type observable.
+export const displayJSON = (value) => JSON.stringify(value, (_key, item) =>
+  typeof item === 'bigint' ? `${item}n` : item)
+export const pageMetadata = (page) => displayJSON({
+  rescuedProps: page.rescuedProps, sharedProps: page.sharedProps,
+  clearHistory: page.clearHistory, encryptHistory: page.encryptHistory,
+  preserveBigIntegers: page.preserveBigIntegers, version: page.version,
+})

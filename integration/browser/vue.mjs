@@ -1,7 +1,7 @@
 import { createSSRApp, createApp, h, onMounted } from 'vue'
 import { renderToString } from '@vue/server-renderer'
-import { createInertiaApp, router, useForm, usePage } from 'inertia-client'
-import { controls, installObservations } from './shared.mjs'
+import { createInertiaApp, Deferred, Head, router, useForm, usePage } from 'inertia-client'
+import { controls, installObservations, displayJSON, pageMetadata } from './shared.mjs'
 
 const View = {
   setup() {
@@ -10,11 +10,19 @@ const View = {
     const actions = controls(router)
     onMounted(() => { document.documentElement.dataset.ready = 'true' })
     return () => h('main', [
+      h(Head, { title: page.props.title }),
       h('h1', { id: 'title' }, page.props.title),
       h('p', { id: 'adapter' }, page.props.adapter),
       h('p', { id: 'heavy' }, page.props.heavy || 'loading'),
       h('p', { id: 'items' }, JSON.stringify(page.props.items || [])),
-      h('pre', { id: 'prop-state' }, JSON.stringify(page.props)),
+      h('pre', { id: 'prop-state' }, displayJSON(page.props)),
+      h('pre', { id: 'page-meta' }, pageMetadata(page)),
+      h('p', { id: 'bigint-type' }, typeof page.props.large?.id),
+      h('div', { id: 'destination' }, 'Fragment destination'),
+      page.props.arrayFixture ? h(Deferred, { data: 'array.0' }, {
+        default: () => h('p', { id: 'array-value' }, page.props.array?.[0] || 'missing'),
+        fallback: () => h('p', { id: 'array-fallback' }, 'Loading array'),
+      }) : null,
       h('p', { id: 'legacy-flash' }, page.props.flash?.success || ''),
       h('p', { id: 'native-flash' }, page.flash?.message || ''),
       ...Object.entries(actions).map(([name, action]) => h('button', { id: name, type: 'button', onClick: action }, name)),

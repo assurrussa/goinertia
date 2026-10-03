@@ -6,6 +6,7 @@ const (
 	ContextKeyProps                 = core.ContextKeyProps
 	ContextKeyViewData              = core.ContextKeyViewData
 	ContextKeyPageMeta              = core.ContextKeyPageMeta
+	HeaderRedirect                  = core.HeaderRedirect
 	HeaderInertia                   = core.HeaderInertia
 	HeaderLocation                  = core.HeaderLocation
 	HeaderVersion                   = core.HeaderVersion
@@ -111,3 +112,30 @@ const FlashLevelInfo = core.FlashLevelInfo
 const FlashLevelWarning = core.FlashLevelWarning
 
 const FlashLevelError = core.FlashLevelError
+
+// V3 transport and SSR configuration are opt-in; existing defaults stay v2.
+type ProtocolVersion = core.ProtocolVersion
+
+type SSRErrorPolicy = core.SSRErrorPolicy
+
+type SSRFailureHandler = core.SSRFailureHandler
+
+type SSRResponseError = core.SSRResponseError
+
+const (
+	ProtocolV2        = core.ProtocolV2
+	ProtocolV3        = core.ProtocolV3
+	SSRErrorDefault   = core.SSRErrorDefault
+	SSRErrorPropagate = core.SSRErrorPropagate
+	SSRErrorFallback  = core.SSRErrorFallback
+)
+
+// V3 prop helpers retain separate wrapper types without changing legacy layouts.
+type RescueProp = core.RescueProp
+
+type ScrollAtProp = core.ScrollAtProp
+
+var (
+	Rescue   = core.Rescue
+	ScrollAt = core.ScrollAt
+)

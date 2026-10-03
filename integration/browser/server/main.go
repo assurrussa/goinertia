@@ -28,10 +28,11 @@ const assetVersion = "browser-v1"
 var templates embed.FS
 
 type config struct {
-	adapter string
-	baseURL string
-	assets  string
-	ssrURL  string
+	adapter  string
+	baseURL  string
+	assets   string
+	ssrURL   string
+	protocol int
 }
 
 type submission struct {
@@ -43,12 +44,16 @@ func main() {
 	port := flag.Int("port", 18984, "HTTP port on the loopback interface")
 	assets := flag.String("assets", "integration/browser/dist", "directory containing app.js")
 	ssrURL := flag.String("ssr-url", "", "optional Inertia Node SSR /render endpoint")
+	protocol := flag.Int("protocol", 2, "Inertia wire protocol: 2 or 3")
 	flag.Parse()
+	if *protocol != 2 && *protocol != 3 {
+		log.Fatal("protocol must be 2 or 3")
+	}
 	if *port < 1 || *port > 65535 {
 		log.Fatal("port must be between 1 and 65535")
 	}
 	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(*port))
-	cfg := config{adapter: *adapter, baseURL: "http://" + address, assets: *assets, ssrURL: *ssrURL}
+	cfg := config{adapter: *adapter, baseURL: "http://" + address, assets: *assets, ssrURL: *ssrURL, protocol: *protocol}
 	if err := serve(cfg, address); err != nil {
 		log.Fatal(err)
 	}
@@ -99,12 +104,19 @@ func homeProps(adapter, rawPage string, deferred bool) map[string]any {
 
 func newFiber(cfg config) (*fiber.App, error) {
 	sessions := fiberSessions{newSessions()}
+	ssrFailures := &failureReports{}
 	opts := []fiberadapter.Option{
 		fiberadapter.WithFS(templates),
 		fiberadapter.WithRootTemplate("templates/app.gohtml"),
 		fiberadapter.WithRootErrorTemplate("templates/error.gohtml"),
 		fiberadapter.WithAssetVersion(assetVersion),
 		fiberadapter.WithSessionStore(sessions),
+	}
+	if cfg.protocol == 3 {
+		opts = append(opts, fiberadapter.WithProtocolVersion(core.ProtocolV3),
+			fiberadapter.WithSSRFailureHandler(ssrFailures.report),
+			fiberadapter.WithPreserveBigIntegers(true),
+			fiberadapter.WithSharedProps(map[string]any{"sharedMarker": "shared-value"}))
 	}
 	if cfg.ssrURL != "" {
 		opts = append(opts, fiberadapter.WithSSRConfig(core.SSRConfig{URL: cfg.ssrURL, DisableRetries: true}))
@@ -142,6 +154,7 @@ func newFiber(cfg config) (*fiber.App, error) {
 		manager.WithNativeFlash(c, "message", "Native saved")
 		return manager.Render(c, "Home", homeProps(cfg.adapter, c.Query("page"), false))
 	})
+	registerFiberV3(app, manager, cfg, ssrFailures)
 	app.Post("/submit", func(c fiber.Ctx) error {
 		var form submission
 		if err := c.Bind().Body(&form); err != nil {
@@ -160,9 +173,14 @@ func newFiber(cfg config) (*fiber.App, error) {
 
 func newHTTP(cfg config) (http.Handler, error) {
 	sessions := httpSessions{newSessions()}
+	ssrFailures := &failureReports{}
 	opts := []core.Option{
 		core.WithFS(templates), core.WithRootTemplate("templates/app.gohtml"),
 		core.WithRootErrorTemplate("templates/error.gohtml"), core.WithAssetVersion(assetVersion),
+	}
+	if cfg.protocol == 3 {
+		opts = append(opts, core.WithProtocolVersion(core.ProtocolV3), core.WithSSRFailureHandler(ssrFailures.report),
+			core.WithPreserveBigIntegers(true), core.WithSharedProps(map[string]any{"sharedMarker": "shared-value"}))
 	}
 	if cfg.ssrURL != "" {
 		opts = append(opts, core.WithSSRConfig(core.SSRConfig{URL: cfg.ssrURL, DisableRetries: true}))
@@ -199,6 +217,7 @@ func newHTTP(cfg config) (http.Handler, error) {
 		manager.WithNativeFlash(nethttp.State(r), "message", "Native saved")
 		return manager.Render(w, r, "Home", homeProps(cfg.adapter, r.URL.Query().Get("page"), false))
 	}))
+	registerHTTPV3(pages, manager, cfg, ssrFailures)
 	pages.Handle("POST /submit", manager.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		form, err := parseSubmission(w, r)
 		if err != nil {

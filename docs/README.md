@@ -18,4 +18,5 @@
 - [Native adapters and compatibility](adapters.md)
 - [Adapter comparison benchmarks](benchmarks.md)
 - [Core and adapter tradeoffs](core-tradeoffs.md)
-- [Protocol coverage and v3 roadmap](protocol-coverage.md)
+- [Protocol coverage](protocol-coverage.md)
+- [Inertia v3 profile and acceptance matrix](inertia-v3.md)

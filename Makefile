@@ -50,9 +50,4 @@ run-example-base:
 
 # Install Playwright Chromium once first; see integration/browser/README.md.
 browser:
-	cd integration/browser && npm ci && \
-	for version in 2.3.18 2.3.28; do \
-	  for framework in vue react; do \
-	    INERTIA_VERSION=$$version FRAMEWORK=$$framework npm run build && npm test || exit $$?; \
-	  done; \
-	done
+	cd integration/browser && npm ci && npm ci --prefix v3 && npm run matrix
