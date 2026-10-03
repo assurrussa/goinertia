@@ -23,6 +23,15 @@ func Benchmark_Middleware(b *testing.B) {
 
 	req := inertiat.NewRequest(http.MethodGet, "/test", nil, nil)
 	req.Header.Set(goinertia.HeaderInertia, "true")
+	req.Header.Set(goinertia.HeaderVersion, "v1.0")
+	resp, err := app.Test(req)
+	if err != nil {
+		b.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		b.Fatalf("expected success, got %d", resp.StatusCode)
+	}
+	_ = resp.Body.Close()
 
 	b.ReportAllocs()
 	b.ResetTimer()

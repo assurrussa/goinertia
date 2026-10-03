@@ -6,12 +6,20 @@ docs in this directory.
 
 ## Purpose
 
-`goinertia` is a Fiber-first Go adapter for Inertia.js. It lets a Go/Fiber
+`goinertia` has a neutral core, a compatible Fiber root facade and native Fiber/net/http adapters. It is a Go adapter for Inertia.js. It lets a Go/Fiber
 backend own routing and controllers while Vue, React, or Svelte owns the
 client-side page components.
 
 The module path is `github.com/assurrussa/goinertia`. The current Go module
-targets Go `1.25.4` and Fiber `v3.0.0-rc.3`.
+targets Go `1.26` and Fiber `v3.3.0`.
+
+The architecture decision retains the neutral core and both native lifecycles.
+The compatible wire contract is a documented Inertia v2.x subset; current
+official documentation targets v3. Read [protocol coverage](protocol-coverage.md)
+before claiming full protocol/client compatibility. The separate
+`integration/nethttp-consumer` module validates the public HTTP API and its compiled
+dependency graph without root/Fiber imports. `make check` and the Go workflow
+run it and the pinned Node 24 client replay explicitly.
 
 ## Public Surface
 

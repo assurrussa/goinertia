@@ -33,3 +33,8 @@ func main() {
     _ = app.Listen(":3000")
 }
 ```
+
+For custom templates, `.page` remains the public PageDTO. Use
+`{{ marshal .pageJSON }}` for the bootstrap JSON when request-only wire metadata
+(such as infinite-scroll reset) is needed. The default template uses this wire
+view; `.page` and ScrollPropConfig keep their previous public field layouts.

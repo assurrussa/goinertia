@@ -1,0 +1,65 @@
+# Core and adapter tradeoffs
+
+The split is a protocol/rendering engine with two native lifecycles. It does
+not turn Fiber into HTTP or introduce a universal framework context. The
+existing root package remains a Fiber compatibility API. One module still
+requires Fiber; only the compiled core/native HTTP graphs are Fiber-free.
+
+## Shared implementation and maintenance cost
+
+Core owns the page DTO, shared/local/request prop precedence, partial and
+deferred/optional/always/once props, merge/scroll/history metadata, validation
+bags, templates/assets, SSR retries/cache/ownership and protocol policy. Both
+adapters execute this code. Those features are substantial reusable behavior;
+their extraction is more than a common interface around two handlers.
+
+The baseline had approximately 2774 physical Go lines in its production root
+files. The initial split had roughly 4325 production lines. After the rereview fixes,
+there are approximately 2513 in core, 1223 in Fiber, 641 in HTTP and 179 in the
+root facade: roughly 4556 total, including comments and excluding tests/generated
+mocks. This is about 64% more source than the original, not a free abstraction.
+Fiber aliases/options and facade forwarding account for part of the increase.
+The HTTP lifecycle includes precommit session cookies and response status,
+streaming, informational responses and optional writer capabilities. These
+semantics need their own tests and future review even when protocol fixtures
+are shared. The native HTTP writer alone is roughly 240 lines.
+
+## What caused the initial slowdown
+
+Allocation profiles identified avoidable work in the first extraction:
+
+- Flash/prop helpers created a complete request State, context helper and
+  owned protocol metadata even when the request only redirected. Such helpers
+  now operate on a temporary concrete State containing existing Locals; a full
+  owned State is created when rendering or explicitly requested by a consumer.
+- Repeated Vary checks allocated token slices and copied current header strings.
+  They now scan tokens without allocation; an empty header gets the canonical
+  combined value once. Direct rendering still applies the required policy.
+- Page building eagerly created unused local/override maps and an empty partial
+  configuration. Reads now leave optional maps nil, override keys are collected
+  only when shared props exist, and absent partial policy needs no allocation.
+- Legacy callbacks already receive the actual Fiber context, so they do not
+  also need the neutral adapter helper added to their lifecycle context. Native
+  callbacks retain that helper; SSR always receives lifecycle context.
+
+Required metadata ownership and SSR body copies remain. No unsafe aliases,
+reflection, universal context or shared State pooling were introduced to recover
+performance. Current numbers and uncertainty are in [benchmarks.md](benchmarks.md).
+
+## Accepted direction
+
+The product decision is to keep the neutral core and maintain a complete native
+HTTP lifecycle alongside Fiber. Broader Inertia support is a planned use for
+the shared protocol implementation. The architecture decision is settled;
+individual protocol features still need the evidence and acceptance gates in
+[protocol-coverage.md](protocol-coverage.md).
+
+Both lifecycles require maintenance, and the additional source/tests and
+measured performance budget remain real costs. Draft status reflects review
+and feature coverage, rather than a pending choice of architecture.
+
+Performance improvement alone does not prove the split is the better design:
+the Vary/map optimizations could also be applied to a Fiber-only implementation.
+The decision is reuse and maintenance cost, not whether extraction work has
+already been done. A larger adapter matrix or a new universal HTTP framework is
+outside this compatible stage.

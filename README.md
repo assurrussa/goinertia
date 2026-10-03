@@ -5,12 +5,13 @@
 [![Go](https://github.com/assurrussa/goinertia/actions/workflows/go.yml/badge.svg)](https://github.com/assurrussa/goinertia/actions/workflows/go.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**The Fiber-first adapter for Inertia.js.**
+**Inertia.js for Go, with a neutral core and native Fiber/net/http adapters.**
 
 `goinertia` allows you to build modern single-page apps
 using [Vue.js](https://vuejs.org/), [React](https://reactjs.org/), or [Svelte](https://svelte.dev/) while keeping
-routing and controllers in your [Go (Fiber)](https://gofiber.io/) backend. It strictly adheres to
-the [Inertia.js protocol](https://inertiajs.com/the-protocol).
+routing and controllers in your Go backend. The compatible API targets an Inertia v2.x
+protocol subset. See the [coverage matrix and v3 roadmap](docs/protocol-coverage.md)
+for supported behavior, compatibility differences and remaining work.
 
 Visit:
 
@@ -19,12 +20,12 @@ Visit:
 
 ## Features
 
-- **⚡️ Fiber Native**: Built specifically for the Fiber web framework (v3).
-- **🔄 Full Protocol Support**: Implements the complete Inertia.js spec.
+- **⚡️ Native adapters**: Fiber v3 and net/http lifecycles, with compatible Fiber root imports.
+- **🔄 Inertia protocol features**: Shared rendering policy across both native adapters.
     - **Asset Versioning**: Auto-reloads assets when versions change.
     - **Partial Reloads**: Only fetch the data you need.
     - **Lazy / Deferred / Once**: Compute expensive props only when requested.
-    - **Merge & Scroll Props**: Built-in support for v2 merge and infinite scroll metadata.
+    - **Merge & Scroll Props**: Root merge and basic scroll metadata, with documented limits.
     - **Shared Data**: Global props (like "auth.user") available to all pages.
 - **🛡️ Validation & Flash**: Built-in helpers for form validation errors and flash messages.
 - **🚀 Server-Side Rendering (SSR)**: Native support for rendering initial HTML on the server.
@@ -81,6 +82,17 @@ func main() {
 	app.Listen(":3000")
 }
 ```
+
+## Native adapters and compatibility
+
+Existing root imports preserve the Fiber API, including lazy callbacks that
+receive `fiber.Ctx`. New applications can use `adapters/fiber` for lifecycle
+context callbacks or `adapters/nethttp` for native `http.Handler` integration.
+The shared `core` package contains request state, page/props, templates, assets
+and SSR policy. This is one Go module with a Go 1.26 baseline.
+
+See [adapter setup, context and session ownership](docs/adapters.md) and
+[reproducible benchmark comparisons](docs/benchmarks.md).
 
 ## Core Concepts
 

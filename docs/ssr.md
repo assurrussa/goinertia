@@ -155,3 +155,8 @@ goinertia.WithSSRConfig(goinertia.SSRConfig{
     SSRClient: &mySSRClient{},
 })
 ```
+
+The default SSR transport is native net/http and returns owned body bytes.
+Custom SSRClient implementations must support concurrent Post calls. Retries
+do not call Reset. Cancellation, transport, status and decoding errors remain
+errors; there is no automatic CSR fallback. Configure SSR before serving.
