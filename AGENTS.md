@@ -67,13 +67,14 @@ and contract-focused; do not copy full local README sections into wiki.
 - Race verification: `go test -race -count=5 ./...`
 - Benchmarks: `make bench-all`
 - Generate mocks: `go generate ./...`
+- Real browser matrix: `make browser` (install Playwright Chromium first; see `integration/browser/README.md`).
 - Full local gate: `make check`
 - Native HTTP consumer: run `go vet ./...`, `go build ./...` and
   `go test -race -count=5 ./...` in `integration/nethttp-consumer`; inspect
   `go list -deps -test ./...` for any Fiber/fasthttp package.
 
 `make check` runs tidy, generate, formatting, vet, lint, tests, race tests,
-HTML coverage, pinned client replay and public HTTP consumer gates. It expects
+HTML coverage, pinned client replay, the real browser matrix and public HTTP consumer gates. It expects
 Node 24 and local tools such as `gofumpt`, `gci`, and
 `golangci-lint`.
 
