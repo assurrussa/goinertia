@@ -43,7 +43,62 @@ Visit:
 go get github.com/assurrussa/goinertia
 ```
 
-## Quick Start
+## Inertia v3 Quick Start
+
+Inertia v3 support is available in **goinertia v0.11.0**. Upgrading the Go
+dependency alone keeps the v2 protocol. Update the frontend bundle and enable
+the v3 protocol together:
+
+```sh
+go get github.com/assurrussa/goinertia@v0.11.0
+# In your Vue frontend directory:
+npm install --save-exact @inertiajs/vue3@3.8.0
+# For React instead, use @inertiajs/react@3.8.0 and React/ReactDOM 19+.
+```
+
+For the root Fiber import (`github.com/assurrussa/goinertia`), add the option
+to your existing setup:
+
+```go
+import (
+	"github.com/assurrussa/goinertia"
+	"github.com/assurrussa/goinertia/views"
+)
+
+inertiaManager, err := goinertia.NewWithValidation("http://localhost:3000",
+	goinertia.WithProtocolVersion(goinertia.ProtocolV3),
+	goinertia.WithFS(views.Templates), // Or your application's template FS.
+	// Keep your existing assets, sessions and CSRF options here.
+)
+if err != nil {
+	panic(err)
+}
+```
+
+If you supply a custom root HTML template, render `{{ .inertiaHead }}` in
+`<head>` and `{{ .inertiaBody }}` in `<body>`, replacing the old
+`<div id="app" data-page="...">`. The body helper emits safely escaped v3
+bootstrap JSON and the mount element, or the complete SSR body; do not add a
+second mount element around it.
+
+The runnable **[v3-app example](examples/v3-app/README.md)** includes the full
+Go setup, template, Vue and React entry points, and optional SSR. To try it from
+a checkout of this repository with Go 1.26+ and Node 24:
+
+```sh
+cd examples/v3-app
+npm ci
+FRAMEWORK=vue npm run build
+# Or: FRAMEWORK=react npm run build
+cd ../..
+go run ./examples/v3-app -adapter fiber
+# Or: go run ./examples/v3-app -adapter nethttp
+```
+
+Open http://127.0.0.1:8383. For native net/http configuration and the migration
+checklist, see [Enable and migrate to v3](docs/inertia-v3.md#enable-v3-in-an-application).
+
+## Inertia v2 Quick Start
 
 Here is a minimal example showing how to set up the Inertia middleware and render a page.
 
@@ -53,11 +108,13 @@ package main
 import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/assurrussa/goinertia"
+	"github.com/assurrussa/goinertia/views"
 )
 
 func main() {
 	// 1. Initialize Inertia
 	inertiaManager, err := goinertia.NewWithValidation("http://localhost:3000",
+		goinertia.WithFS(views.Templates),
 		goinertia.WithAssetVersion("v1"),
 		goinertia.WithSharedProps(map[string]any{
 			"appName": "My App",
@@ -186,6 +243,7 @@ Supported:
 Comprehensive documentation is available in the `docs/` directory:
 
 - [Basic Setup](docs/basic.md)
+- [Enable and migrate to Inertia v3](docs/inertia-v3.md#enable-v3-in-an-application)
 - [Configuration Options](docs/options.md)
 - [Flash Messages](docs/flash.md)
 - [Validation & Redirects](docs/validation.md)
@@ -199,6 +257,7 @@ Comprehensive documentation is available in the `docs/` directory:
 
 Check the `examples/` directory for fully functional sample applications:
 
+- **v3-app**: [Inertia v3 with Vue or React, Fiber or net/http, CSR or SSR](examples/v3-app/README.md). Includes explicit protocol configuration and the v3 HTML template.
 - **basic-app**: [A simple Vue app](examples/basic-app/main.go) showing routing, layout, deferred/once props, and Precognition.
 - **basic-app-ssr**: [A simple Vue app with SSR](examples/basic-app-ssr/main.go) showing the same flow with server-side rendering.
 - **basic-app-react**: [A simple React app](examples/basic-app-react/main.go) showing the same backend API working with `@inertiajs/react`.

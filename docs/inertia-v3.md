@@ -23,6 +23,75 @@ and `ScrollPropConfig` layouts remain unchanged. The new response metadata is
 request-local. Direct core consumers must use `MarshalPageWithState(page,state)`
 and `RenderHTML(state,page)`, rather than `json.Marshal(page)`, to include it.
 
+## Enable v3 in an application
+
+Start with **goinertia v0.11.0** (`go get github.com/assurrussa/goinertia@v0.11.0`).
+The [runnable v3 example](../examples/v3-app/README.md) contains both adapters,
+both tested frontend frameworks, the root template and an optional Node SSR
+renderer. It uses the same public API available to another Go module.
+
+For the root Fiber API, import `github.com/assurrussa/goinertia` and add
+`goinertia.WithProtocolVersion(goinertia.ProtocolV3)` to `NewWithValidation`.
+For native Fiber, import `github.com/assurrussa/goinertia/adapters/fiber` and
+use `fiberadapter.WithProtocolVersion(core.ProtocolV3)`. For native net/http:
+
+```go
+import (
+    nethttp "github.com/assurrussa/goinertia/adapters/nethttp"
+    "github.com/assurrussa/goinertia/core"
+    "github.com/assurrussa/goinertia/views"
+)
+
+// Keep the existing session, CSRF, template and asset options as well.
+manager, err := nethttp.NewWithValidation("http://localhost:3000",
+    nethttp.WithCoreOptions(
+        core.WithProtocolVersion(core.ProtocolV3),
+        core.WithFS(views.Templates), // Or your application's template FS.
+    ),
+)
+if err != nil {
+    panic(err)
+}
+```
+
+Migrate each application as one matched server-and-frontend change:
+
+1. Update its Go module to v0.11.0 and its Vue or React Inertia package to
+   **3.8.0**, including any direct `@inertiajs/core` dependency. Preserve the
+   package-manager lockfile. React requires React/ReactDOM 19+; Vue applications
+   do not need React. Inertia v3 packages require an ESM-capable build.
+2. Enable `ProtocolV3` on the engine serving that frontend. `WithAssetVersion`
+   identifies the built assets; setting it to `"v3"` does not select the protocol.
+3. Replace a custom root template's old `data-page` mount element with
+   `{{ .inertiaBody }}` and put `{{ .inertiaHead }}` in its `<head>`. Keep the
+   application's stylesheet and module-script tags. Do not hand-serialize page
+   JSON, wrap the helper in another mount element, or retain a duplicate mount.
+   The library's default template already supports both profiles.
+4. Update client event handlers from `invalid` to `httpException` and from
+   `exception` to `networkError`. Replace calls to the `router.cancel()` method
+   with `router.cancelAll()` and choose whether asynchronous and prefetch
+   requests should also be canceled. Check the
+   [official upgrade guide](https://inertiajs.com/docs/v3/getting-started/upgrade-guide)
+   for client API changes used by your application. Custom HTTP exception
+   handlers must handle the v3 response shape instead of assuming Axios fields
+   such as `response.config.url`. If SSR is enabled, rebuild
+   and restart its renderer with the same client version and hydration setup.
+5. Migrate any Axios-specific Inertia request configuration. V3 uses a built-in
+   XHR client; `axios.defaults` no longer configures it. For a custom CSRF cookie
+   and header, pass `http: { xsrfCookieName: 'csrf_token', xsrfHeaderName:
+   'X-CSRF-Token' }` to `createInertiaApp`, using the names your server issues
+   and checks. Keep Axios configuration for separate Axios requests if needed.
+6. Rebuild and publish matching assets with a new asset fingerprint. Verify
+   initial page load, navigation, login/session/CSRF, forms and validation,
+   redirects, partial/deferred/Once props, flash, and back/forward history.
+   Check real hydration and failure fallback when SSR is enabled.
+
+If a library supplies an embedded admin frontend, migrate that library's Go
+engine, template and browser bundle first, then update each consuming app and
+rebuild any overridden assets or templates. Unrelated backend libraries need
+no protocol switch. A Go dependency update alone cannot migrate an embedded
+v2 frontend.
+
 ## Server protocol acceptance matrix
 
 “Covered” below identifies executable tests, not a substitute for recording a
@@ -101,7 +170,7 @@ they are not extra fields or required operations in the wire protocol.
 
 React v3 requires React 19+. Inertia v3 packages are ESM-only. The versioned
 browser fixture isolates React 19 from the retained v2 React 18 fixtures.
-Client event renames (`httpException`, `networkError`, `cancelAll`), XHR transport,
+Client event renames (`httpException`, `networkError`), `router.cancelAll()`, XHR transport,
 `useHttp`, optimistic updates, layouts, `<Deferred>`, `<InfiniteScroll>`, instant
 visits, polling and prefetch caching belong to the client. The adapter supplies
 their documented HTTP and page metadata; it does not reimplement client logic.

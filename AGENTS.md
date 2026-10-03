@@ -55,6 +55,7 @@ and contract-focused; do not copy full local README sections into wiki.
 - `inertiat/`: reusable test helpers for Fiber/Inertia requests and mock
   session support.
 - `views/`, `public/`, and `testdata/`: embedded defaults and test fixtures.
+- `examples/v3-app`: opt-in Inertia v3, Vue/React, native Fiber/net/http, CSR/SSR.
 - `examples/basic-app`: Vue client example without SSR.
 - `examples/basic-app-ssr`: Vue client example with SSR.
 - `examples/basic-app-react`: React client example without SSR.
