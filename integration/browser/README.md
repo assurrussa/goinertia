@@ -63,7 +63,7 @@ npm test
 
 Each v2 profile selects the unchanged 15-scenario regression set across four
 adapter/bootstrap combinations: **240 historical browser scenarios** total.
-Each v3 profile selects that shared set plus 15 v3 scenarios: **240 v3 scenarios**
+Each v3 profile selects that shared set plus 16 v3 scenarios: **248 v3 scenarios**
 selected in total, of which four intentionally skip the SSR-only failure test
 in CSR projects. Reports and traces are separated by version/framework in
 `playwright-report/` and `test-results/`, so later profiles do not overwrite

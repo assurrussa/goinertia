@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/require"
@@ -366,5 +367,46 @@ func TestV3ValidationHelpersComposeForPrecognition(t *testing.T) {
 			all()
 		}
 		require.Equal(t, ValidationErrors{"name": {"required", "short"}, "email": {"invalid"}}, engine.PrecognitionErrors(state))
+	}
+}
+
+func TestV3OnceMetadataTracksResolvedOwnership(t *testing.T) {
+	t.Parallel()
+	expiry := int64(9000)
+	value := map[string]any{"name": "fresh", "sibling": "also fresh"}
+	once := func(value any) OnceProp {
+		return Once(value, WithOnceKey("tree-cache"), WithOnceExpiresAt(time.UnixMilli(expiry)))
+	}
+	for _, fixture := range []struct {
+		name                   string
+		props                  map[string]any
+		only, except, wantPath string
+	}{
+		{"descendant refresh", map[string]any{"tree": once(value)}, "tree.name", "", "tree"},
+		{"remapped ownership", map[string]any{"renamed": once(value)}, "renamed.name", "", "renamed"},
+		{"provider bypass", map[string]any{"container": LazyProp{Fn: func(context.Context) (any, error) {
+			return map[string]any{"chosen": true, "tree": once(value)}, nil
+		}}}, "container.chosen", "", "container.tree"},
+		{"always bypass", map[string]any{"tree": Always(once(value))}, "", "tree", "tree"},
+		{"excluded by only", map[string]any{"tree": once(value)}, "other", "", ""},
+		{"excluded by except", map[string]any{"tree": once(value)}, "", "tree", ""},
+		{"rescued omission", map[string]any{"tree": Rescue(Defer(once(
+			func(context.Context) (any, error) { return nil, errors.New("synthetic failure") },
+		)))}, "tree.name", "", ""},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
+			page, _ := v3Page(t, RequestMeta{
+				Inertia: "true", PartialComponent: "Page", PartialOnly: fixture.only,
+				PartialExcept: fixture.except, ExceptOnceProps: "tree-cache",
+			}, fixture.props)
+			if fixture.wantPath == "" {
+				require.Empty(t, page.OnceProps)
+				return
+			}
+			require.Equal(t, map[string]OncePropConfig{
+				"tree-cache": {Prop: fixture.wantPath, ExpiresAt: &expiry},
+			}, page.OnceProps)
+		})
 	}
 }

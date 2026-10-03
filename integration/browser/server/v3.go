@@ -63,10 +63,31 @@ func recursiveProps(adapter, rawStep string, fail bool) map[string]any {
 	return props
 }
 
+func onceRefreshProps(adapter, rawStep string) map[string]any {
+	step := fixtureStep(rawStep)
+	props := pageProps(adapter, "Once metadata")
+	props["step"] = step
+	path, ttl := "tree", time.Hour
+	if step > 1 {
+		ttl = 2 * time.Hour
+	}
+	if step >= 4 {
+		path = "renamed"
+	}
+	// Only the browser Date clock advances. Every response supplies an absolute
+	// expiry, letting the client prove partial metadata renewed its remembered key.
+	props[path] = core.Once(map[string]any{
+		"name": fmt.Sprintf("name-%d", step), "sibling": fmt.Sprintf("sibling-%d", step),
+	}, core.WithOnceKey("container-cache"), core.WithOnceExpiresAt(time.Now().Add(ttl)))
+	return props
+}
+
 func v3Props(cfg config, path, rawStep string, fail bool) (string, map[string]any) {
 	switch path {
 	case "/v3/recursive":
 		return "Recursive", recursiveProps(cfg.adapter, rawStep, fail)
+	case "/v3/once-refresh":
+		return "OnceMetadata", onceRefreshProps(cfg.adapter, rawStep)
 	case "/v3/array":
 		props := pageProps(cfg.adapter, "Array wrappers")
 		props["arrayFixture"] = true

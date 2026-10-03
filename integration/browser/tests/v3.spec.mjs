@@ -136,6 +136,61 @@ test('combined only and except intersect, and recursive once is reused on full v
   await expect.poll(() => propState(page)).toMatchObject({ panel: { label: 'panel-2', cached: 'cache-3' } })
 })
 
+test('descendant once refresh renews expiry and remaps cache ownership across full visits', async ({ page }, info) => {
+  await ready(page, '/v3/once-refresh')
+  const initial = await initialPage(page)
+  const base = { title: 'Once metadata', adapter: info.project.metadata.adapter, sharedMarker: 'shared-value', errors: {} }
+  const value = step => ({ name: `name-${step}`, sibling: `sibling-${step}` })
+  expect(initial.component).toBe('OnceMetadata')
+  expect(initial.props).toEqual({ ...base, step: 1, tree: value(1) })
+  expect(initial.onceProps).toEqual({ 'container-cache': { prop: 'tree', expiresAt: expect.any(Number) } })
+  await expect.poll(() => propState(page)).toEqual(initial.props)
+
+  async function responseFor(step, only) {
+    const pending = page.waitForResponse(response => new URL(response.url()).pathname === '/v3/once-refresh'
+      && new URL(response.url()).searchParams.get('step') === String(step))
+    if (only) await page.evaluate(({ step, only }) => window.__router.reload({ data: { step }, only: [only] }), { step, only })
+    else await visit(page, `/v3/once-refresh?step=${step}`)
+    const response = await pending
+    const headers = response.request().headers()
+    expect(response.status()).toBe(200)
+    expect(response.headers()['x-inertia']).toBe('true')
+    expect(headers['x-inertia']).toBe('true')
+    expect(headers['x-inertia-except-once-props']).toBe('container-cache')
+    expect(headers['x-inertia-partial-data']).toBe(only)
+    expect(headers['x-inertia-partial-component']).toBe(only ? 'OnceMetadata' : undefined)
+    expect(headers['x-inertia-partial-except']).toBeUndefined()
+    const data = await response.json()
+    expect(data.component).toBe('OnceMetadata')
+    expect(data.url).toBe(`/v3/once-refresh?step=${step}`)
+    expect(data.onceProps).toEqual({ 'container-cache': {
+      prop: step >= 4 ? 'renamed' : 'tree', expiresAt: expect.any(Number),
+    } })
+    return data
+  }
+
+  const refreshed = await responseFor(2, 'tree.name')
+  expect(refreshed.props).toEqual({ errors: {}, tree: value(2) })
+  expect(refreshed.onceProps['container-cache'].expiresAt).toBeGreaterThan(initial.onceProps['container-cache'].expiresAt + 30 * 60_000)
+  await expect.poll(() => propState(page)).toEqual({ ...base, step: 1, tree: value(2) })
+
+  // The initial deadline has passed, but the descendant partial renewed this
+  // key. A full visit must still omit it on the wire and restore step 2.
+  await page.clock.setFixedTime(initial.onceProps['container-cache'].expiresAt + 1)
+  const reused = await responseFor(3)
+  expect(reused.props).toEqual({ ...base, step: 3 })
+  await expect.poll(() => propState(page)).toEqual({ ...base, step: 3, tree: value(2) })
+
+  const renamed = await responseFor(4, 'renamed.name')
+  expect(renamed.props).toEqual({ errors: {}, renamed: value(4) })
+  await expect.poll(() => propState(page)).toEqual({ ...base, step: 3, tree: value(2), renamed: value(4) })
+
+  const remapped = await responseFor(5)
+  expect(remapped.props).toEqual({ ...base, step: 5 })
+  // A complete state assertion also rejects restoring the old tree ownership.
+  await expect.poll(() => propState(page)).toEqual({ ...base, step: 5, renamed: value(4) })
+})
+
 test('foreground asset conflicts reload while background conflicts only notify', async ({ page }) => {
   await ready(page)
   await page.evaluate(() => new Promise(resolve => window.__router.replace({ version: 'obsolete', onFinish: () => resolve() })))

@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -95,6 +96,63 @@ func TestV3FixtureRecursiveRescueAndPartial(t *testing.T) {
 				core.HeaderPartialComponent: "Provider", core.HeaderPartialOnly: "panel.provided",
 			})
 			require.Equal(t, map[string]any{"provided": "provider-value", "extra": "provider-child"}, provider.Props["panel"])
+		})
+	}
+}
+
+func TestV3FixtureOnceRefreshMetadata(t *testing.T) {
+	t.Parallel()
+	for _, adapter := range []string{"fiber", "nethttp"} {
+		t.Run(adapter, func(t *testing.T) {
+			t.Parallel()
+			client := fixtureClient{send: fixtureTransport(t, config{adapter: adapter, protocol: 3, assets: t.TempDir()})}
+			initial := client.page(t, "/v3/once-refresh", nil)
+			require.Equal(t, "OnceMetadata", initial.Component)
+			require.Equal(t, map[string]any{
+				"title": "Once metadata", "adapter": adapter, "step": float64(1),
+				"sharedMarker": "shared-value", "errors": map[string]any{},
+				"tree": map[string]any{"name": "name-1", "sibling": "sibling-1"},
+			}, initial.Props)
+			require.Len(t, initial.OnceProps, 1)
+			initialOnce := initial.OnceProps["container-cache"]
+			require.Equal(t, "tree", initialOnce.Prop)
+			require.NotNil(t, initialOnce.ExpiresAt)
+			for _, visit := range []struct {
+				step int
+				path string
+				only string
+			}{
+				{2, "tree", "tree.name"},
+				{3, "tree", ""},
+				{4, "renamed", "renamed.name"},
+				{5, "renamed", ""},
+			} {
+				headers := map[string]string{core.HeaderExceptOnceProps: "container-cache"}
+				if visit.only != "" {
+					headers[core.HeaderPartialComponent] = "OnceMetadata"
+					headers[core.HeaderPartialOnly] = visit.only
+				}
+				page := client.page(t, "/v3/once-refresh?step="+strconv.Itoa(visit.step), headers)
+				require.Equal(t, "OnceMetadata", page.Component)
+				require.Len(t, page.OnceProps, 1)
+				once := page.OnceProps["container-cache"]
+				require.Equal(t, visit.path, once.Prop)
+				require.NotNil(t, once.ExpiresAt)
+				require.Greater(t, *once.ExpiresAt, *initialOnce.ExpiresAt+(30*time.Minute).Milliseconds())
+				if visit.only != "" {
+					require.Equal(t, map[string]any{
+						"errors": map[string]any{},
+						visit.path: map[string]any{
+							"name": "name-" + strconv.Itoa(visit.step), "sibling": "sibling-" + strconv.Itoa(visit.step),
+						},
+					}, page.Props)
+				} else {
+					require.Equal(t, map[string]any{
+						"title": "Once metadata", "adapter": adapter, "step": float64(visit.step),
+						"sharedMarker": "shared-value", "errors": map[string]any{},
+					}, page.Props)
+				}
+			}
 		})
 	}
 }

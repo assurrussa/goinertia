@@ -63,7 +63,12 @@ gates at the end of this document against its exact candidate SHA.
 - V2 keeps its `data-page` attribute bootstrap and historical except precedence.
   V3 uses the script bootstrap and intersects only/except.
 - V2 keeps historical once omission unless explicitly selected or opted into
-  refresh. V3 ignores remembered-once exclusions on matching partial requests.
+  refresh. V3 ignores remembered-once exclusions on matching partial requests. Once
+  metadata accompanies every successfully included value, including a selected
+  descendant of a wrapped container or an Always/provider bypass. This preserves
+  refreshed expiry and custom-key ownership when a prop is renamed. The pinned
+  reference adapter filters this metadata more narrowly; this edge case is
+  covered by dedicated Go and real-client regressions.
 - V2 keeps log-and-omit callback errors. V3 propagates errors unless rescued.
   A canceled request is never rescued into a success response.
 - V3 resolves nested wrappers in maps and slices, including wrappers returned

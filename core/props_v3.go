@@ -325,7 +325,11 @@ func (r *v3Resolver) resolveTypedContainer(path, cachePath string, value any, by
 }
 
 func (r *v3Resolver) collectOnce(prop v3Prop, path string) {
-	if prop.once == nil || !r.selected(path, false) {
+	// Partial selection has already run before resolution. Every included Once
+	// value needs its current ownership and expiry, including descendant-only
+	// selection and provider/Always bypasses. A second path filter can leave the
+	// client's remembered key pointing at an old prop after a rename.
+	if prop.once == nil {
 		return
 	}
 	key := prop.once.Key
