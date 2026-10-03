@@ -20,6 +20,7 @@ type pageMeta struct {
 	scrollProps    map[string]ScrollPropConfig
 	encryptHistory *bool
 	clearHistory   *bool
+	nativeFlash    map[string]any
 }
 
 type partialConfig struct {
@@ -724,7 +725,7 @@ func (i *Inertia) RenderHTML(c *State, page *PageDTO) ([]byte, error) {
 	}
 
 	viewData["page"] = page
-	viewData["pageJSON"] = pageResponse(page, c.Meta.Reset)
+	viewData["pageJSON"] = pageResponse(page, c.Meta.Reset, c.nativeFlash())
 
 	if i.IsSSREnabled() {
 		ssr, err := i.processSSR(c.Context, viewData["pageJSON"])

@@ -125,6 +125,11 @@ inertiaManager.WithFlashSuccess(ctx, "Profile updated!")
 return inertiaManager.Redirect(ctx, "/profile")
 ```
 
+For opt-in native Inertia flash events and history exclusion, use
+`inertiaManager.WithNativeFlash(ctx, "message", "Profile updated!")`.
+The existing helpers above keep their compatible `props.flash` behavior.
+See [flash API and lifecycle](docs/flash.md).
+
 ### Lazy Evaluation
 
 Optimize performance by wrapping expensive data in `WithLazyProp`. These are only executed if the client explicitly

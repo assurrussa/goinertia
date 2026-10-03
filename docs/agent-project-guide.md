@@ -33,7 +33,8 @@ The root package provides the production API:
 - Prop helpers: `WithProp`, `WithViewData`, `WithLazyProp`,
   `WithMatchPropsOn`, `WithEncryptHistory`, `WithClearHistory`, `Defer`,
   `Optional`, `Always`, `Merge`, `Prepend`, `DeepMerge`, `Scroll`, and `Once`.
-- Flash and validation helpers: `WithFlashSuccess`, `WithFlashInfo`,
+- Flash and validation helpers: `WithNativeFlash` (top-level `page.flash`),
+  `WithFlashSuccess`, `WithFlashInfo`,
   `WithFlashWarning`, `WithFlashError`, `WithFlashOld`, `WithErrors`,
   `WithError`, and `WithValidationErrors`.
 - Options: template/public filesystems, templates, asset version, session

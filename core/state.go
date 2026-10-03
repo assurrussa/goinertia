@@ -72,6 +72,9 @@ func (s *State) FlashToPersist() map[string]any {
 	if v, ok := s.Props[ContextPropsOld].(map[string]any); ok && len(v) > 0 {
 		data[ContextPropsOld] = v
 	}
+	if s.pageMeta != nil && len(s.pageMeta.nativeFlash) > 0 {
+		data[nativeFlashSessionKey] = s.pageMeta.nativeFlash
+	}
 	return data
 }
 
