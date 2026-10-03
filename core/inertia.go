@@ -332,6 +332,8 @@ func (i *Inertia) getContextKeyPageMeta(c *State) *pageMeta {
 }
 
 func (i *Inertia) BuildPage(c *State, component string, props map[string]any) (*PageDTO, error) {
+	c.propMetadata = nil
+	c.nestedMergeRoots = nil
 	partial := i.parsePartialConfig(c, component)
 
 	page := &PageDTO{
@@ -411,8 +413,7 @@ func (p *partialConfig) explicitlyIncluded(key string) bool {
 	if p == nil || !p.hasInclude || p.include == nil {
 		return false
 	}
-	_, ok := p.include[key]
-	return ok
+	return (propSelection{only: true, paths: p.include}).child(key).mayInclude()
 }
 
 func (p *partialConfig) isReset(key string) bool {
@@ -517,6 +518,14 @@ func (i *Inertia) addRequestProps(c *State, page *PageDTO, props map[string]any,
 	previous := c.propSource
 	c.propSource = source
 	for key, value := range props {
+		nestedMerge := hasNestedMerge(value)
+		if (nestedMerge || c.nestedMergeRoots[key]) && i.shouldIncludeProp(key, partial) {
+			omitUnselectedProp(c, page, key)
+			if c.nestedMergeRoots == nil {
+				c.nestedMergeRoots = make(map[string]bool)
+			}
+			c.nestedMergeRoots[key] = nestedMerge
+		}
 		i.setPropValue(c, page, key, value, partial)
 	}
 	c.propSource = previous
@@ -541,19 +550,17 @@ func (i *Inertia) collectOverrideKeys(c *State, props map[string]any) map[string
 
 func (i *Inertia) setPropValue(c *State, page *PageDTO, key string, value any, partial *partialConfig) {
 	if value == nil {
-		i.setNilProp(page, key, partial)
+		i.setNilProp(c, page, key, partial)
 		return
 	}
 
-	if op, ok := value.(OnceProp); ok {
-		next, skip := i.applyOnceProp(page, key, op, partial)
-		if skip {
+	if next, op := peelOnce(value, 0); op != nil {
+		if _, skip := i.applyOnceProp(page, key, *op, partial); skip {
 			return
 		}
-
 		value = next
 		if value == nil {
-			i.setNilProp(page, key, partial)
+			i.setNilProp(c, page, key, partial)
 			return
 		}
 	}
@@ -566,18 +573,23 @@ func (i *Inertia) setPropValue(c *State, page *PageDTO, key string, value any, p
 		return
 	}
 
-	result, err := i.resolvePropValue(c, key, value)
+	result, included, err := i.resolveSelectedPropValue(c, key, value, partial.selectionForProp(key))
 	if err != nil {
 		i.logger.WarnContext(c.Context, "failed to evaluate prop", "key", key, "error", err)
 		return
 	}
-
-	page.Props[key] = result
+	if included {
+		page.Props[key] = result
+	} else {
+		omitUnselectedProp(c, page, key)
+	}
 }
 
-func (i *Inertia) setNilProp(page *PageDTO, key string, partial *partialConfig) {
-	if i.shouldIncludeProp(key, partial) {
+func (i *Inertia) setNilProp(c *State, page *PageDTO, key string, partial *partialConfig) {
+	if !partial.selectionForProp(key).only {
 		page.Props[key] = nil
+	} else {
+		omitUnselectedProp(c, page, key)
 	}
 }
 
@@ -597,11 +609,13 @@ func (i *Inertia) applyOnceProp(page *PageDTO, key string, op OnceProp, partial 
 		ExpiresAt: op.ExpiresAt,
 	}
 
-	if partial != nil && partial.shouldSkipOnce(onceKey, key) {
+	settings := onceValueSettings(op.Value)
+	refresh := settings.fresh || (settings.refreshOnPartial && partial != nil && partial.isPartial)
+	if !refresh && partial != nil && partial.shouldSkipOnce(onceKey, key) {
 		return nil, true
 	}
 
-	return op.Value, false
+	return settings.value, false
 }
 
 func (i *Inertia) handleWrappedProp(c *State, page *PageDTO, key string, value any, partial *partialConfig) bool {
@@ -612,6 +626,8 @@ func (i *Inertia) handleWrappedProp(c *State, page *PageDTO, key string, value a
 		return i.handleOptionalProp(c, page, key, prop, partial)
 	case AlwaysProp:
 		return i.handleAlwaysProp(c, page, key, prop, partial)
+	case NestedMergeProp:
+		return i.handleNestedMergeProp(c, page, key, prop, partial)
 	case MergeProp:
 		return i.handleMergeProp(c, page, key, prop, partial)
 	case ScrollProp:
@@ -670,11 +686,11 @@ func (i *Inertia) handleMergeProp(c *State, page *PageDTO, key string, prop Merg
 	if partial == nil || !partial.isReset(key) {
 		switch {
 		case prop.Prepend:
-			page.PrependProps = appendUnique(page.PrependProps, key)
+			appendPropMetadata(c, page, key, key, prependMetadata)
 		case prop.Deep:
-			page.DeepMergeProps = appendUnique(page.DeepMergeProps, key)
+			appendPropMetadata(c, page, key, key, deepMetadata)
 		default:
-			page.MergeProps = appendUnique(page.MergeProps, key)
+			appendPropMetadata(c, page, key, key, appendMetadata)
 		}
 	}
 	return true
@@ -704,9 +720,9 @@ func (i *Inertia) handleScrollProp(c *State, page *PageDTO, key string, prop Scr
 		}
 	}
 	if partial != nil && partial.scrollMergeIntent == "prepend" {
-		page.PrependProps = appendUnique(page.PrependProps, mergePath)
+		appendPropMetadata(c, page, key, mergePath, prependMetadata)
 	} else {
-		page.MergeProps = appendUnique(page.MergeProps, mergePath)
+		appendPropMetadata(c, page, key, mergePath, appendMetadata)
 	}
 
 	return true
@@ -971,30 +987,7 @@ func (i *Inertia) IsExternalRedirect(target string) bool {
 }
 
 func (p *partialConfig) shouldIncludeProp(key string) bool {
-	if p == nil {
-		return true
-	}
-	if _, ok := p.forceInclude[key]; ok {
-		return true
-	}
-	if !p.isPartial {
-		return true
-	}
-	if p.hasExclude {
-		if p.exclude == nil {
-			return true
-		}
-		_, excluded := p.exclude[key]
-		return !excluded
-	}
-	if p.hasInclude {
-		if p.include == nil {
-			return false
-		}
-		_, included := p.include[key]
-		return included
-	}
-	return true
+	return p.selectionForProp(key).mayInclude()
 }
 
 // NormalizeConfig applies template defaults after adapter options. Call only before serving.

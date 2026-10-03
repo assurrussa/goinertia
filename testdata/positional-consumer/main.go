@@ -8,6 +8,12 @@ import (
 
 // These positional literals are the pre-extraction public source contract.
 var (
+	_ = goinertia.MergeProp{[]int{1}, false, false}
+	_ = fiberadapter.MergeProp{[]int{1}, false, false}
+	_ = core.MergeProp{[]int{1}, false, false}
+	_ = goinertia.OnceProp{"cache-key", nil, "value"}
+	_ = fiberadapter.OnceProp{"cache-key", nil, "value"}
+	_ = core.OnceProp{"cache-key", nil, "value"}
 	_ = goinertia.ScrollPropConfig{"page", nil, 2, 1}
 	_ = fiberadapter.ScrollPropConfig{"page", nil, 2, 1}
 	_ = core.ScrollPropConfig{"page", nil, 2, 1}

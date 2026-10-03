@@ -35,22 +35,29 @@ type (
 	OptionalProp     = core.OptionalProp
 	AlwaysProp       = core.AlwaysProp
 	MergeProp        = core.MergeProp
+	MergeTarget      = core.MergeTarget
+	NestedMergeProp  = core.NestedMergeProp
 	ScrollProp       = core.ScrollProp
 	OnceProp         = core.OnceProp
 	OnceOption       = core.OnceOption
 )
 
 var (
-	Defer             = core.Defer
-	Optional          = core.Optional
-	Always            = core.Always
-	Merge             = core.Merge
-	Prepend           = core.Prepend
-	DeepMerge         = core.DeepMerge
-	Scroll            = core.Scroll
-	Once              = core.Once
-	WithOnceKey       = core.WithOnceKey
-	WithOnceExpiresAt = core.WithOnceExpiresAt
+	Defer                    = core.Defer
+	Optional                 = core.Optional
+	Always                   = core.Always
+	MergeAt                  = core.MergeAt
+	AppendAt                 = core.AppendAt
+	PrependAt                = core.PrependAt
+	Merge                    = core.Merge
+	Prepend                  = core.Prepend
+	DeepMerge                = core.DeepMerge
+	Scroll                   = core.Scroll
+	Once                     = core.Once
+	WithOnceFresh            = core.WithOnceFresh
+	WithOnceRefreshOnPartial = core.WithOnceRefreshOnPartial
+	WithOnceKey              = core.WithOnceKey
+	WithOnceExpiresAt        = core.WithOnceExpiresAt
 )
 
 type (

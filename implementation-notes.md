@@ -85,3 +85,24 @@ SSR/body/metadata/session ownership remains intact without unsafe aliases or
 State pooling. Full make check/build, protocol/race, external consumer and
 GoAdmin source gates pass. Results and remaining acceptance limits are in
 docs/benchmarks.md; the product/maintenance decision is in docs/core-tradeoffs.md.
+
+
+## V2 prop follow-up (stage 3)
+
+Nested selection traverses JSON maps before lazy resolution, with deterministic
+literal-dot dual matching and preserved except precedence. Required ancestor
+callbacks still execute. Filtered containers are request-owned. MergeAt supplies
+new target metadata without adding fields to positional MergeProp literals.
+Once freshness settings are held in a private Value envelope through existing
+OnceOption, preserving OnceProp's public layout. Root Deferred/Optional/Merge
+composition is supported; arbitrary wrappers in nested containers are not.
+The official v2 selected-partial Once refresh rule is opt-in, preserving existing
+except-only behavior. Full v3 migration is a later, separately scoped task.
+
+Merge metadata ownership is tracked per page in request-private State rather
+than inferred from dotted wire paths. Literal dotted root names and nested
+paths can emit identical labels. Removing one root removes only its ownership;
+other emitting roots retain their label, while unrelated plain values cannot
+inherit stale merge instructions. New MergeAt values replace lower-layer data
+and wrapper metadata before Once/deferred selection; old wrapper replacement
+semantics outside MergeAt remain unchanged.

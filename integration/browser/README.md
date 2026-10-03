@@ -42,7 +42,7 @@ npm test
 Repeat the build/test commands for `FRAMEWORK=react` and `INERTIA_VERSION=2.3.18`,
 or run `make browser` at the repository root after installing Chromium. The Go
 workflow has four independently reported matrix jobs. Each runs all four
-transport/bootstrap combinations, for 28 browser scenarios per job (112 total).
+transport/bootstrap combinations, for 60 browser scenarios per job (240 total).
 Failures preserve Playwright traces/reports in CI artifacts. Retries are disabled.
 The servers bind to loopback only and use disposable, random-cookie test sessions.
 Do not expose this fixture as a production application.
@@ -53,6 +53,13 @@ Covered flows:
   heading DOM node, hydration/JavaScript error checks.
 - Inertia transitions without document reload, Back and Forward restoration.
 - Deferred network requests and real client partial merge/reset behavior.
+- Once-prop wire omission and client reuse, explicit reloads, opt-in except-only
+  refresh, server-forced fresh values, expiry using the browser Date clock,
+  custom-key reuse across renamed props/components, and both wrapper orders with
+  deferred and optional props. Deferred cached props must not refetch.
+- Nested append/prepend targets with identity matching, whole-root reset, and
+  dotted only/except selection. Plain selected objects follow the actual client’s
+  shallow root replacement behavior.
 - `useForm` validation errors, corrected resubmission and write redirects.
 - Native `page.flash`, `onFlash` and global flash event; legacy `props.flash`
   coexistence; native history stripping and legacy history preservation;

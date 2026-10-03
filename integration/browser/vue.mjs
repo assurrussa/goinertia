@@ -14,6 +14,7 @@ const View = {
       h('p', { id: 'adapter' }, page.props.adapter),
       h('p', { id: 'heavy' }, page.props.heavy || 'loading'),
       h('p', { id: 'items' }, JSON.stringify(page.props.items || [])),
+      h('pre', { id: 'prop-state' }, JSON.stringify(page.props)),
       h('p', { id: 'legacy-flash' }, page.props.flash?.success || ''),
       h('p', { id: 'native-flash' }, page.flash?.message || ''),
       ...Object.entries(actions).map(([name, action]) => h('button', { id: name, type: 'button', onClick: action }, name)),

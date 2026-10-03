@@ -44,18 +44,18 @@ owns that policy. A core cell marked “policy” requires adapter lifecycle wir
 | Empty successful handler response | Host | Partial | Partial | Partial | No automatic redirect-back for an empty 200; HTTP commits a normal empty response |
 | Top-level partial only/except and component match | Implemented | Implemented | Implemented | Implemented | Mismatched component returns a full page; reserved errors/flash/old/CSRF remain included |
 | Both only and except supplied | Partial | Partial | Partial | Partial | Historical except precedence is retained; the official adapter applies only, then excludes |
-| Dotted/nested partial selection | Missing | Missing | Missing | Missing | Maps are filtered by their literal top-level keys; no recursive path resolver |
+| Dotted/nested partial selection | Implemented | Implemented | Implemented | Implemented | JSON-map paths filter before callbacks; literal dotted keys also match; typed containers and array indexes stay opaque |
 | Lazy callbacks and per-request result cache | Implemented | Implemented | Implemented | Implemented | Root callback receives actual fiber.Ctx; native callbacks receive lifecycle context |
 | Optional/deferred full visit and explicit only | Implemented | Implemented | Implemented | Implemented | Omit on full visit, announce deferred groups, evaluate explicit matching only |
 | Optional/deferred except-only selection | Implemented | Implemented | Implemented | Implemented | Matching except reload evaluates eligible wrappers and skips excluded ones; corrected v2 behavior |
 | Deferred announcements on partial responses | Implemented | Implemented | Implemented | Implemented | Partial responses no longer schedule another deferred group |
 | Wrapper composition and nesting | Partial | Partial | Partial | Partial | Lazy callbacks in map[string]any and []any containers resolve with copy-on-change ownership; nested prop wrappers/typed Go containers are not recursively interpreted |
 | Root append/prepend/deep merge labels | Implemented | Implemented | Implemented | Implemented | Selected/resolved props only; missing or failed values no longer leave merge/scroll labels |
-| Nested merge targets and mixed strategies | Missing | Missing | Missing | Missing | Merge/Prepend/DeepMerge operate on the root prop; no append-at-path API |
-| Matching items metadata | Partial | Partial | Partial | Partial | WithMatchPropsOn emits host-supplied paths; no wrapper-level match API or reset/partial path validation |
+| Nested merge targets and mixed strategies | Implemented | Implemented | Implemented | Implemented | Additive MergeAt with AppendAt/PrependAt targets; selected/resolved paths only; root reset suppresses wrapper labels |
+| Matching items metadata | Partial | Partial | Partial | Partial | MergeAt target matching is selected/resolved/reset-aware; legacy WithMatchPropsOn remains host-supplied and unvalidated |
 | Reset root merge labels | Implemented | Implemented | Implemented | Implemented | Selected value is re-resolved and append/prepend/deep label omitted |
 | Infinite scroll | Partial | Partial | Partial | Partial | Manual metadata, map paginator data path, append/prepend intent and reset flag work; no typed paginator normalization, custom data path or deferred-by-default scroll |
-| Once keys, expiry metadata and explicit reload | Partial | Partial | Partial | Partial | Key/expiry and explicit only work; metadata follows partial selection; no force-refresh option and except-only skip differs from reference |
+| Once keys, expiry metadata and explicit reload | Partial | Partial | Partial | Partial | Key/expiry, explicit only, WithOnceFresh and supported root compositions work; WithOnceRefreshOnPartial opts into reference except-only refresh; legacy default preserved |
 | Errors object, first error, named bag | Implemented | Implemented | Implemented | Implemented | Empty object, flattening and named bag fixtures; hosts provide validation/session source |
 | History clear/encrypt flags | Implemented | Implemented | Implemented | Implemented | Server emits flags; encryption and browser storage are client responsibilities |
 | Shared/context/request prop precedence | Implemented | Implemented | Implemented | Implemented | Existing override/lazy tests; startup configuration is immutable during serving |
@@ -166,10 +166,13 @@ HTTP/Fiber parity failures introduced by extraction. Work in this order:
 2. Complete common prop semantics: dotted selection, nested merge targets,
    custom scroll paths/defer metadata, once refresh, and versioned only/except/error
    behavior. Use one core implementation and the same adapter fixtures.
-3. Add v3 bootstrap, redirect and deferred rescue/error contracts beyond the
-   opt-in native flash now available. Preserve legacy flash and callback compatibility. Give HTTP native
-   error policy hooks where host customization is needed.
-4. Validate v3 SSR development/per-request control and the broader client matrix.
+3. V2 follow-up (stage 3): dotted JSON-map selection, nested mixed merge/match
+   targets and additive Once freshness/composition. Preserve exported struct
+   layouts, reserved props, except precedence and legacy Once defaults.
+   Custom scroll normalization and unrestricted recursive wrappers remain deferred.
+4. Later, separately scoped v3 work: bootstrap, redirect and deferred rescue/error
+   contracts beyond native flash, HTTP error-policy hooks, SSR development and
+   per-request control, and the broader v3 client matrix.
    Re-run lifecycle/race, external consumers and performance budgets for every
    material change. Publication/release acceptance is separate from these tests.
 
