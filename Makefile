@@ -1,9 +1,9 @@
 .DEFAULT_GOAL := check
-.PHONY: check tidy generate fmt vet lint test test-race protocol-replay http-consumer cover-html bench-all
+.PHONY: check tidy generate fmt vet lint test test-race protocol-replay http-consumer browser cover-html bench-all
 GO_MODULE := $(shell go list -m)
 GO_FILES := $(shell find . -type f -name '*.go')
 
-check: tidy generate fmt vet lint test test-race protocol-replay http-consumer cover-html
+check: tidy generate fmt vet lint test test-race protocol-replay http-consumer browser cover-html
 
 tidy:
 	go mod tidy
@@ -47,3 +47,12 @@ cover-html:
 PORT ?= 8383
 run-example-base:
 	go run examples/basic-app/main.go -port $(PORT)
+
+# Install Playwright Chromium once first; see integration/browser/README.md.
+browser:
+	cd integration/browser && npm ci && \
+	for version in 2.3.18 2.3.28; do \
+	  for framework in vue react; do \
+	    INERTIA_VERSION=$$version FRAMEWORK=$$framework npm run build && npm test || exit $$?; \
+	  done; \
+	done
