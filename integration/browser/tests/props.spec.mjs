@@ -128,14 +128,18 @@ test('nested append/prepend match identities and root reset replaces both arrays
     older: [{ id: 9, label: 'ninth' }, { id: 10, label: 'tenth updated' }],
     page: 2,
   } })
-  const reset = await clickResponse(page, 'nestedReset', 'feed')
+  // Both pinned v2 clients concatenate only + reset without deduplicating.
+  // Keep this exact: missing, wrong, or extra partial targets must not match.
+  const reset = await clickResponse(page, 'nestedReset', 'feed,feed')
   expect(reset.headers['x-inertia-reset']).toBe('feed')
   expect(reset.data.mergeProps).toBeUndefined()
   expect(reset.data.prependProps).toBeUndefined()
   expect(reset.data.matchPropsOn).toBeUndefined()
-  await expect.poll(() => state(page)).toMatchObject({ feed: {
+  const replacement = {
     data: [{ id: 3, label: 'third' }], older: [{ id: 8, label: 'eighth' }], page: 3,
-  } })
+  }
+  expect(reset.data.props.feed).toEqual(replacement)
+  await expect.poll(async () => (await state(page)).feed).toEqual(replacement)
 })
 
 test('dotted only/except selections return nested objects with real partial replacement', async ({ page }) => {
