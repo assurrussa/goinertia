@@ -636,7 +636,7 @@ func (i *Inertia) setFlashSessionData(c fiber.Ctx) {
 	// Only persist flash-related props that are meant to survive redirects.
 	var local core.State
 	s := i.mutationState(c, &local)
-	if len(s.Props) == 0 {
+	if len(s.Props) == 0 && s.LegacyPageMeta() == nil {
 		return
 	}
 	flashData := s.FlashToPersist()
@@ -654,7 +654,7 @@ func (i *Inertia) setFlashSessionData(c fiber.Ctx) {
 
 // loadFlashSessionData loads flash data from session storage.
 func (i *Inertia) renderJSON(c fiber.Ctx, s *core.State, page *PageDTO) error {
-	js, err := core.MarshalPage(page, s.Meta.Reset)
+	js, err := core.MarshalPageWithState(page, s)
 	if err != nil {
 		return fmt.Errorf("error marshaling page: %w", err)
 	}
@@ -678,6 +678,15 @@ func (i *Inertia) WithViewData(c fiber.Ctx, key string, value any) {
 	var local core.State
 	s := i.mutationState(c, &local)
 	i.Inertia.WithViewData(s, key, value)
+	i.syncState(c, s)
+}
+
+// WithNativeFlash adds a JSON-serializable value to top-level page.flash.
+// It is independent of the legacy WithFlash helpers and props.flash.
+func (i *Inertia) WithNativeFlash(c fiber.Ctx, key string, value any) {
+	var local core.State
+	s := i.mutationState(c, &local)
+	i.Inertia.WithNativeFlash(s, key, value)
 	i.syncState(c, s)
 }
 

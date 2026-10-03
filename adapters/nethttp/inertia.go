@@ -241,7 +241,7 @@ func (i *Inertia) Render(w http.ResponseWriter, r *http.Request, component strin
 		return fmt.Errorf("could not build page: %w", err)
 	}
 	if s.Meta.Inertia != "" {
-		data, err := core.MarshalPage(page, s.Meta.Reset)
+		data, err := core.MarshalPageWithState(page, s)
 		if err != nil {
 			return fmt.Errorf("error marshaling page: %w", err)
 		}

@@ -19,8 +19,12 @@ The official documentation defaults to v3 and explicitly marks v2 as legacy.
 See the [documentation index](https://inertiajs.com/docs/llms.txt),
 [v2 protocol](https://inertiajs.com/docs/v2/core-concepts/the-protocol), and
 [v3 upgrade guide](https://inertiajs.com/docs/v3/getting-started/upgrade-guide).
-Sources were checked on 2026-10-02; no latest patch release or public Go tag is
-asserted. Existing example client manifests are not migrated in this PR.
+Sources were checked on 2026-10-03; no latest patch release or public Go tag is
+asserted. The examples now pin 2.3.28. A separate [real browser matrix](../integration/browser/README.md)
+exercises published Vue/React clients at exact 2.3.18 and 2.3.28, each against
+native Fiber/net/http with CSR and actual SSR hydration. Its CI jobs are a merge
+gate, independent of the historical focused method replay. This matrix does not
+certify every client feature or an unrestricted v2/v3 compatibility claim.
 
 Implemented means the server behavior exists and is covered by local tests.
 Partial means a documented subset or compatibility difference remains.
@@ -56,7 +60,7 @@ owns that policy. A core cell marked “policy” requires adapter lifecycle wir
 | History clear/encrypt flags | Implemented | Implemented | Implemented | Implemented | Server emits flags; encryption and browser storage are client responsibilities |
 | Shared/context/request prop precedence | Implemented | Implemented | Implemented | Implemented | Existing override/lazy tests; startup configuration is immutable during serving |
 | Legacy flash/old/errors through session | Policy | Implemented | Implemented | Implemented | Redirect persistence and consume-once tests; these remain ordinary page props |
-| Native flash outside browser history | Missing | Missing | Missing | Missing | No top-level page.flash; legacy props.flash does not provide the v2.3.3+/v3 onFlash semantics |
+| Native flash outside browser history | Policy | Implemented | Implemented | Implemented | Opt-in WithNativeFlash emits top-level page.flash; legacy props.flash remains unchanged; history/events belong to the pinned v2 client |
 | Prefetch/poll/load-visible request transport | Partial | Partial | Partial | Partial | Ordinary Inertia requests work; Purpose-specific behavior, history/client caching and scheduling belong to the host/client |
 | Precognition server responses | Policy | Implemented | Implemented | Implemented | 204/422, validate-only, Vary and checker-only tests; no Laravel validation integration |
 
@@ -111,7 +115,7 @@ introduce requirements beyond the compatible template/DTO contract:
 | X-Inertia-Redirect fresh Inertia GET response | Missing | Missing | Missing | Missing |
 | Explicit deferred rescue and rescuedProps | Missing | Missing | Missing | Missing |
 | Recursive nested wrappers and dotted selection/metadata | Missing | Missing | Missing | Missing |
-| Native flash / onFlash | Missing | Missing | Missing | Missing |
+| Native flash / onFlash | v2 subset | v2 subset | v2 subset | v2 subset |
 | Exception page with correct error status/shared props | Partial | Partial | Partial | Partial |
 
 Lazy callback errors currently log and omit the value, preserving old behavior.
@@ -119,8 +123,10 @@ This is not v3 deferred rescue: there is no explicit rescue choice or rescuedPro
 signal. The [deferred error policy](https://inertiajs.com/docs/v3/data-props/deferred-props)
 needs a versioned design before changing that default. The
 [native flash API](https://inertiajs.com/docs/v2/data-props/flash-data) also exists
-in later v2 clients; normal props.flash remains in history and must not be
-advertised as its equivalent. v3 error pages require dedicated tests against
+in later v2 clients; `WithNativeFlash` opts into its top-level wire contract.
+Normal props.flash remains in history and must not be advertised as its
+equivalent. See [flash behavior and session lifecycle](flash.md).
+v3 error pages require dedicated tests against
 [exception handling](https://inertiajs.com/docs/v3/advanced/error-handling).
 
 ## Acceptance gates and phased work
@@ -139,8 +145,10 @@ aliases remain. ScrollPropConfig retains its original four-field layout, includi
 positional literals. The request-only reset flag is encoded by an internal wire
 view, rather than added to the public DTO/config. Raw JSON, default HTML and SSR
 fixtures cover it. For direct core consumers, BuildPage returns the compatible
-DTO; `core.MarshalPage(page, state.Meta.Reset)` creates the request wire response.
-Plain json.Marshal(PageDTO) lacks request-only metadata. The adapters perform
+DTO; `core.MarshalPageWithState(page, state)` creates the request wire response
+including opt-in native flash and scroll reset. The older
+`core.MarshalPage(page, state.Meta.Reset)` remains available for scroll reset
+only. Plain json.Marshal(PageDTO) lacks request-only metadata. The adapters perform
 this step, and replay fixtures keep raw response JSON. Nested lazy cache keys use
 source layers and length-prefixed
 map/array paths; literal dots and context/request callbacks cannot alias.
@@ -158,8 +166,8 @@ HTTP/Fiber parity failures introduced by extraction. Work in this order:
 2. Complete common prop semantics: dotted selection, nested merge targets,
    custom scroll paths/defer metadata, once refresh, and versioned only/except/error
    behavior. Use one core implementation and the same adapter fixtures.
-3. Add opt-in native flash and v3 bootstrap, redirect and deferred rescue/error
-   contracts. Preserve legacy flash and callback compatibility. Give HTTP native
+3. Add v3 bootstrap, redirect and deferred rescue/error contracts beyond the
+   opt-in native flash now available. Preserve legacy flash and callback compatibility. Give HTTP native
    error policy hooks where host customization is needed.
 4. Validate v3 SSR development/per-request control and the broader client matrix.
    Re-run lifecycle/race, external consumers and performance budgets for every

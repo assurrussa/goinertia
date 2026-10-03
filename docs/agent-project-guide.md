@@ -19,7 +19,11 @@ official documentation targets v3. Read [protocol coverage](protocol-coverage.md
 before claiming full protocol/client compatibility. The separate
 `integration/nethttp-consumer` module validates the public HTTP API and its compiled
 dependency graph without root/Fiber imports. `make check` and the Go workflow
-run it and the pinned Node 24 client replay explicitly.
+run it and the pinned Node 24 client replay explicitly. The separate
+`integration/browser` fixture tests published Vue/React clients at 2.3.18 and
+2.3.28 with both native adapters and CSR/SSR hydration. `make browser` and four
+CI matrix jobs exercise it; Chromium is required. A replay or SSR-only render
+is not a substitute for the browser jobs.
 
 ## Public Surface
 
@@ -33,7 +37,8 @@ The root package provides the production API:
 - Prop helpers: `WithProp`, `WithViewData`, `WithLazyProp`,
   `WithMatchPropsOn`, `WithEncryptHistory`, `WithClearHistory`, `Defer`,
   `Optional`, `Always`, `Merge`, `Prepend`, `DeepMerge`, `Scroll`, and `Once`.
-- Flash and validation helpers: `WithFlashSuccess`, `WithFlashInfo`,
+- Flash and validation helpers: `WithNativeFlash` (top-level `page.flash`),
+  `WithFlashSuccess`, `WithFlashInfo`,
   `WithFlashWarning`, `WithFlashError`, `WithFlashOld`, `WithErrors`,
   `WithError`, and `WithValidationErrors`.
 - Options: template/public filesystems, templates, asset version, session
