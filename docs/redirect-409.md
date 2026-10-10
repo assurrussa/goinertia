@@ -7,6 +7,24 @@ Inertia.js distinguishes **internal redirects** from **external redirects**:
 
 In addition, a **409 Conflict** is used when the asset version changes (version mismatch).
 
+## Explicit root and empty targets
+
+`Redirect(..., "/")` preserves `Location: /` in the compatible root API and
+both native adapters. The browser resolves it against its current origin, so an
+HTTPS browser request forwarded to an HTTP backend stays on HTTPS without
+requiring additional proxy trust. Inertia requests treat this as an internal
+redirect: `302` for GET, or `303` after a write request through middleware.
+
+`RedirectExternal(..., "/")` also preserves the relative root, but continues
+to force a `409` with both `Location: /` and `X-Inertia-Location: /`, for
+ordinary and Inertia requests alike.
+
+An empty target (`""`) retains its historical behavior: it expands to the
+request-derived base URL, not the configured application origin. With an HTTP
+backend this can still produce an HTTP URL; pass `"/"` explicitly when you
+want to stay on the browser's origin. Explicit absolute URLs and fragment
+redirect policy are unchanged.
+
 ## Session Configuration
 
 To preserve information (like flash messages) across these redirects, you **must** configure a session store.

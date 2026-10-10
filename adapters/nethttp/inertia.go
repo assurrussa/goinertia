@@ -320,7 +320,7 @@ func (i *Inertia) renderPrecognition(w http.ResponseWriter, errs core.Validation
 // Redirect applies native Inertia external/internal redirect policy.
 func (i *Inertia) Redirect(w http.ResponseWriter, r *http.Request, target string) error {
 	State(r)
-	if target == "" || target == "/" {
+	if target == "" {
 		target = RequestMeta(r).BaseURL
 	}
 	if r.Header.Get(core.HeaderInertia) != "" && i.IsExternalRedirect(target) {
@@ -338,7 +338,7 @@ func (i *Inertia) Redirect(w http.ResponseWriter, r *http.Request, target string
 // RedirectExternal forces an Inertia location visit.
 func (i *Inertia) RedirectExternal(w http.ResponseWriter, r *http.Request, target string) error {
 	State(r)
-	if target == "" || target == "/" {
+	if target == "" {
 		target = RequestMeta(r).BaseURL
 	}
 	w.Header().Set(core.HeaderLocation, target)
