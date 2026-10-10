@@ -636,7 +636,7 @@ func TestInertia_RedirectHelpers_Empty(t *testing.T) {
 	}, nil)
 	assert.Equal(t, http.StatusFound, resp.StatusCode)
 	assert.Empty(t, resp.Header.Get(goinertia.HeaderLocation))
-	assert.Equal(t, "http://example.com", resp.Header.Get(fiber.HeaderLocation))
+	assert.Equal(t, "/", resp.Header.Get(fiber.HeaderLocation))
 	assert.Empty(t, body)
 }
 

@@ -507,7 +507,7 @@ func (i *Inertia) RedirectBack(c fiber.Ctx) error {
 
 // Redirect handles redirects according to Inertia.js protocol.
 func (i *Inertia) Redirect(c fiber.Ctx, url string) error {
-	if url == "" || url == "/" {
+	if url == "" {
 		url = c.BaseURL()
 	}
 	if c.Get(HeaderInertia) != "" {
@@ -529,7 +529,7 @@ func (i *Inertia) Redirect(c fiber.Ctx, url string) error {
 
 // RedirectExternal forces a full page reload for Inertia requests.
 func (i *Inertia) RedirectExternal(c fiber.Ctx, url string) error {
-	if url == "" || url == "/" {
+	if url == "" {
 		url = c.BaseURL()
 	}
 

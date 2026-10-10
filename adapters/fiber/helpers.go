@@ -10,7 +10,7 @@ import (
 )
 
 func Redirect(c fiber.Ctx, url string) error {
-	if url == "" || url == "/" {
+	if url == "" {
 		url = c.BaseURL()
 	}
 
@@ -25,7 +25,7 @@ func Redirect(c fiber.Ctx, url string) error {
 
 // RedirectExternal forces a full page reload for Inertia requests.
 func RedirectExternal(c fiber.Ctx, url string) error {
-	if url == "" || url == "/" {
+	if url == "" {
 		url = c.BaseURL()
 	}
 
