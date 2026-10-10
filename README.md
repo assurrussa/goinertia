@@ -5,7 +5,7 @@
 [![Go](https://github.com/assurrussa/goinertia/actions/workflows/go.yml/badge.svg)](https://github.com/assurrussa/goinertia/actions/workflows/go.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Inertia.js for Go, with a neutral core and native Fiber/net/http adapters.**
+**Inertia.js for Go, with a framework-neutral core and native net/http and Fiber v3 adapters.**
 
 `goinertia` allows you to build modern single-page apps
 using [Vue.js](https://vuejs.org/), [React](https://reactjs.org/), or [Svelte](https://svelte.dev/) while keeping
@@ -42,6 +42,24 @@ Visit:
 ```bash
 go get github.com/assurrussa/goinertia
 ```
+
+## Native adapters and compatibility
+
+Choose the import that matches your backend:
+
+- **Native net/http**: `github.com/assurrussa/goinertia/adapters/nethttp`
+  integrates with `http.Handler`. See the [net/http setup](docs/adapters.md#native-nethttp).
+- **Native Fiber v3**: `github.com/assurrussa/goinertia/adapters/fiber`
+  uses lifecycle context callbacks. See [context compatibility](docs/adapters.md#context-compatibility).
+- **Compatible Fiber root API**: `github.com/assurrussa/goinertia` preserves
+  existing Fiber signatures, including lazy callbacks that receive `fiber.Ctx`.
+
+The shared `core` package contains request state, page/props, templates, assets
+and SSR policy. This is one Go module with a Go 1.26 baseline. Both native
+adapters use Inertia v2 by default; Inertia v3 is an explicit opt-in.
+
+See [adapter setup, context and session ownership](docs/adapters.md) and
+[reproducible benchmark comparisons](docs/benchmarks.md).
 
 ## Inertia v3 Quick Start
 
@@ -100,7 +118,8 @@ checklist, see [Enable and migrate to v3](docs/inertia-v3.md#enable-v3-in-an-app
 
 ## Inertia v2 Quick Start
 
-Here is a minimal example showing how to set up the Inertia middleware and render a page.
+This example uses the compatible Fiber root API to set up middleware and render
+a page. For native net/http, use the [net/http setup](docs/adapters.md#native-nethttp).
 
 ```go
 package main
@@ -141,17 +160,6 @@ func main() {
 	app.Listen(":3000")
 }
 ```
-
-## Native adapters and compatibility
-
-Existing root imports preserve the Fiber API, including lazy callbacks that
-receive `fiber.Ctx`. New applications can use `adapters/fiber` for lifecycle
-context callbacks or `adapters/nethttp` for native `http.Handler` integration.
-The shared `core` package contains request state, page/props, templates, assets
-and SSR policy. This is one Go module with a Go 1.26 baseline.
-
-See [adapter setup, context and session ownership](docs/adapters.md) and
-[reproducible benchmark comparisons](docs/benchmarks.md).
 
 ## Core Concepts
 
@@ -242,7 +250,8 @@ Supported:
 
 Comprehensive documentation is available in the `docs/` directory:
 
-- [Basic Setup](docs/basic.md)
+- [Native net/http and Fiber adapters](docs/adapters.md)
+- [Basic Setup (compatible Fiber root API)](docs/basic.md)
 - [Enable and migrate to Inertia v3](docs/inertia-v3.md#enable-v3-in-an-application)
 - [Configuration Options](docs/options.md)
 - [Flash Messages](docs/flash.md)
