@@ -63,12 +63,12 @@ See [adapter setup, context and session ownership](docs/adapters.md) and
 
 ## Inertia v3 Quick Start
 
-Inertia v3 support is available in **goinertia v0.11.0**. Upgrading the Go
-dependency alone keeps the v2 protocol. Update the frontend bundle and enable
+Inertia v3 support was introduced in **goinertia v0.11.0**. Use **v0.11.1**
+for the relative-root redirect fix. Upgrading the Go dependency alone keeps the v2 protocol. Update the frontend bundle and enable
 the v3 protocol together:
 
 ```sh
-go get github.com/assurrussa/goinertia@v0.11.0
+go get github.com/assurrussa/goinertia@v0.11.1
 # In your Vue frontend directory:
 npm install --save-exact @inertiajs/vue3@3.8.0
 # For React instead, use @inertiajs/react@3.8.0 and React/ReactDOM 19+.
