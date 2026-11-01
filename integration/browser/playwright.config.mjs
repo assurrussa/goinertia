@@ -15,8 +15,11 @@ export default defineConfig({
   retries: 0,
   reporter: [['list'], ['html', { open: 'never', outputFolder: `playwright-report/${matrix.version}-${matrix.framework}` }]],
   use: { browserName: 'chromium', trace: 'retain-on-failure',
-    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
-      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {},
+    launchOptions: {
+      ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+        ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}),
+      chromiumSandbox: true,
+    },
   },
   projects: combinations.map(({ adapter, ssr, port }) => ({
     name: `${adapter}-${ssr ? 'ssr' : 'csr'}`,
@@ -31,3 +34,4 @@ export default defineConfig({
     })),
   ],
 })
+
