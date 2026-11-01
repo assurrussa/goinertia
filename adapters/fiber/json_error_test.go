@@ -88,7 +88,9 @@ func TestJSONHandlerErrorRetainsStatusAndSafeDetails(t *testing.T) {
 			require.NoError(t, err)
 			defer response.Body.Close()
 			require.Equal(t, status, response.StatusCode)
-			for _, header := range []string{"Location", fiberadapter.HeaderInertia, fiberadapter.HeaderLocation, fiberadapter.HeaderRedirect} {
+			for _, header := range []string{
+				"Location", fiberadapter.HeaderInertia, fiberadapter.HeaderLocation, fiberadapter.HeaderRedirect,
+			} {
 				require.Empty(t, response.Header.Get(header), header)
 			}
 			var body map[string]any
