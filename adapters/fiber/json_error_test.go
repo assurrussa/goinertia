@@ -1,4 +1,4 @@
-package fiberadapter
+package fiberadapter_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/require"
 
+	fiberadapter "github.com/assurrussa/goinertia/adapters/fiber"
 	"github.com/assurrussa/goinertia/views"
 )
 
@@ -37,7 +38,24 @@ func TestJSONErrorAcceptNegotiation(t *testing.T) {
 	} {
 		t.Run(test.accept, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, test.json, prefersJSONError(test.accept))
+			manager := fiberadapter.New("https://app.example")
+			app := fiber.New(fiber.Config{ErrorHandler: manager.MiddlewareErrorListener()})
+			app.Use(manager.Middleware())
+			app.Put("/save", func(fiber.Ctx) error { return fiberadapter.NewError(419, "expired") })
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/save", nil)
+			request.Header.Set("Accept", test.accept)
+			request.Header.Set("Referer", "https://app.example/form")
+			response, err := app.Test(request)
+			require.NoError(t, err)
+			defer response.Body.Close()
+			if test.json {
+				require.Equal(t, 419, response.StatusCode)
+				require.Contains(t, response.Header.Get("Content-Type"), "application/json")
+				require.Empty(t, response.Header.Get("Location"))
+			} else {
+				require.Equal(t, http.StatusFound, response.StatusCode)
+				require.Equal(t, "https://app.example/form", response.Header.Get("Location"))
+			}
 		})
 	}
 }
@@ -47,9 +65,9 @@ func TestJSONHandlerErrorRetainsStatusAndSafeDetails(t *testing.T) {
 	for _, status := range []int{401, 403, 419, 422, 503} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			t.Parallel()
-			manager := New("https://app.example",
-				WithCanExposeDetails(func(context.Context, map[string][]string) bool { return false }),
-				WithCustomErrorDetailsHandler(func(_ *Error, canExpose bool) string {
+			manager := fiberadapter.New("https://app.example",
+				fiberadapter.WithCanExposeDetails(func(context.Context, map[string][]string) bool { return false }),
+				fiberadapter.WithCustomErrorDetailsHandler(func(_ *fiberadapter.Error, canExpose bool) string {
 					if canExpose {
 						return "private diagnostic"
 					}
@@ -58,11 +76,11 @@ func TestJSONHandlerErrorRetainsStatusAndSafeDetails(t *testing.T) {
 			app := fiber.New(fiber.Config{ErrorHandler: manager.MiddlewareErrorListener()})
 			app.Use(manager.Middleware())
 			app.Patch("/save", func(c fiber.Ctx) error {
-				c.Set(HeaderInertia, "true")
-				c.Set(HeaderLocation, "/old-location")
-				c.Set(HeaderRedirect, "/old-redirect")
+				c.Set(fiberadapter.HeaderInertia, "true")
+				c.Set(fiberadapter.HeaderLocation, "/old-location")
+				c.Set(fiberadapter.HeaderRedirect, "/old-redirect")
 				c.Set("Location", "/old-location")
-				return NewValidationError(status, "private diagnostic", ValidationErrors{"name": {"invalid"}})
+				return fiberadapter.NewValidationError(status, "private diagnostic", fiberadapter.ValidationErrors{"name": {"invalid"}})
 			})
 			request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/save", nil)
 			request.Header.Set("Accept", "application/json")
@@ -70,12 +88,12 @@ func TestJSONHandlerErrorRetainsStatusAndSafeDetails(t *testing.T) {
 			require.NoError(t, err)
 			defer response.Body.Close()
 			require.Equal(t, status, response.StatusCode)
-			for _, header := range []string{"Location", HeaderInertia, HeaderLocation, HeaderRedirect} {
+			for _, header := range []string{"Location", fiberadapter.HeaderInertia, fiberadapter.HeaderLocation, fiberadapter.HeaderRedirect} {
 				require.Empty(t, response.Header.Get(header), header)
 			}
 			var body map[string]any
 			require.NoError(t, json.NewDecoder(response.Body).Decode(&body))
-			require.Equal(t, "safe message", body[errorMessageKey])
+			require.Equal(t, "safe message", body["message"])
 			require.Equal(t, map[string]any{"name": []any{"invalid"}}, body["errors"])
 		})
 	}
@@ -91,16 +109,16 @@ func TestJSONCSRFErrorDoesNotRedirectOrRunCommand(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			store := &jsonErrorSessionStore{}
-			options := []Option{
-				WithFS(views.Templates),
-				WithSessionStore(store),
-				WithCSRFTokenCheckProvider(func(fiber.Ctx) error {
-					return NewError(419, "expired proof")
+			options := []fiberadapter.Option{
+				fiberadapter.WithFS(views.Templates),
+				fiberadapter.WithSessionStore(store),
+				fiberadapter.WithCSRFTokenCheckProvider(func(fiber.Ctx) error {
+					return fiberadapter.NewError(419, "expired proof")
 				}),
 			}
-			manager := New("https://app.example", options...)
+			manager := fiberadapter.New("https://app.example", options...)
 			if legacy {
-				manager = NewLegacy("https://app.example", options...)
+				manager = fiberadapter.NewLegacy("https://app.example", options...)
 			}
 			app := fiber.New(fiber.Config{ErrorHandler: manager.MiddlewareErrorListener()})
 			app.Use(manager.Middleware())
@@ -119,36 +137,46 @@ func TestJSONCSRFErrorDoesNotRedirectOrRunCommand(t *testing.T) {
 			require.Zero(t, commands)
 			require.Zero(t, store.writes, "a JSON CSRF error must not persist flash or validation data")
 			require.Empty(t, response.Header.Get("Location"))
-			require.Empty(t, response.Header.Get(HeaderInertia))
-			require.Empty(t, response.Header.Get(HeaderLocation))
-			require.Empty(t, response.Header.Get(HeaderRedirect))
+			require.Empty(t, response.Header.Get(fiberadapter.HeaderInertia))
+			require.Empty(t, response.Header.Get(fiberadapter.HeaderLocation))
+			require.Empty(t, response.Header.Get(fiberadapter.HeaderRedirect))
 			require.Contains(t, response.Header.Get("Content-Type"), "application/json")
 			require.Contains(t, response.Header.Get("Vary"), "Accept")
 			require.Equal(t, "no-store", response.Header.Get("Cache-Control"))
 			var body map[string]any
 			require.NoError(t, json.NewDecoder(response.Body).Decode(&body))
-			require.Contains(t, body, errorMessageKey)
+			require.Contains(t, body, "message")
 			require.NotContains(t, body, "flash")
 		})
 	}
 }
 
-type jsonErrorSessionStore struct{ writes int }
+type jsonErrorSessionStore struct {
+	writes int
+}
 
-func (*jsonErrorSessionStore) Get(fiber.Ctx, string) (any, error) { return nil, nil }
+func (*jsonErrorSessionStore) Get(fiber.Ctx, string) (any, error) {
+	return map[string]any{}, nil
+}
+
 func (s *jsonErrorSessionStore) Set(fiber.Ctx, string, any) error {
 	s.writes++
 	return nil
 }
+
 func (s *jsonErrorSessionStore) Delete(fiber.Ctx, string) error {
 	s.writes++
 	return nil
 }
+
 func (s *jsonErrorSessionStore) Flash(fiber.Ctx, string, any) error {
 	s.writes++
 	return nil
 }
-func (*jsonErrorSessionStore) GetFlash(fiber.Ctx, string) (any, error) { return nil, nil }
+
+func (*jsonErrorSessionStore) GetFlash(fiber.Ctx, string) (any, error) {
+	return map[string]any{}, nil
+}
 
 func TestJSONErrorDoesNotChangeBrowserOrInertiaRedirects(t *testing.T) {
 	t.Parallel()
@@ -164,8 +192,8 @@ func TestJSONErrorDoesNotChangeBrowserOrInertiaRedirects(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			manager := New("https://app.example", WithFS(views.Templates),
-				WithCSRFTokenCheckProvider(func(fiber.Ctx) error { return NewError(419, "expired") }))
+			manager := fiberadapter.New("https://app.example", fiberadapter.WithFS(views.Templates),
+				fiberadapter.WithCSRFTokenCheckProvider(func(fiber.Ctx) error { return fiberadapter.NewError(419, "expired") }))
 			app := fiber.New(fiber.Config{ErrorHandler: manager.MiddlewareErrorListener()})
 			app.Use(manager.Middleware())
 			app.Put("/save", func(c fiber.Ctx) error { return c.SendString("never") })
@@ -173,7 +201,7 @@ func TestJSONErrorDoesNotChangeBrowserOrInertiaRedirects(t *testing.T) {
 			request.Header.Set("Accept", test.accept)
 			request.Header.Set("Referer", "https://app.example/form")
 			if test.inertia {
-				request.Header.Set(HeaderInertia, "true")
+				request.Header.Set(fiberadapter.HeaderInertia, "true")
 			}
 			response, err := app.Test(request)
 			require.NoError(t, err)

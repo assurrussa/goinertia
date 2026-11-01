@@ -214,4 +214,3 @@ func (i *Inertia) isRedirectStatus(statusCode int) bool {
 	return statusCode == fiber.StatusFound ||
 		statusCode == fiber.StatusMovedPermanently
 }
-
