@@ -57,6 +57,8 @@ jobs:
     env:
       INERTIA_VERSION: ${{ matrix.inertia }}
       FRAMEWORK: ${{ matrix.framework }}
+      # The runner's packaged Chrome can use Ubuntu's AppArmor profile.
+      PLAYWRIGHT_CHROMIUM_EXECUTABLE: /opt/google/chrome/chrome
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -69,8 +71,10 @@ jobs:
           cache-dependency-path: integration/browser/package-lock.json
       - run: npm ci
         working-directory: integration/browser
-      - run: npx playwright install --with-deps chromium
-        working-directory: integration/browser
+      - name: Check runner Chrome
+        run: |
+          test -x "$PLAYWRIGHT_CHROMIUM_EXECUTABLE"
+          "$PLAYWRIGHT_CHROMIUM_EXECUTABLE" --version
       - run: npm run build && npm test
         working-directory: integration/browser
       - uses: actions/upload-artifact@v4
